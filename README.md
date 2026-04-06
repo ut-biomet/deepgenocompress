@@ -10,4 +10,61 @@ Availability of Rice Datasets: You can access the dataset from [here](http://www
 
 Availability of Maize Datasets: You can access the dataset from [here](https://iagr.genomics.cn/CropGS/#/).
 
+## Development environment
 
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management. A Nix flake
+is also provided, for nix users go directly to the [Nix section](#nix-optional) below.
+
+### Prerequisites
+
+- Python 3.11 or higher
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
+- (Recommended) Linux, MacOs, or [WSL](https://learn.microsoft.com/en-us/windows/wsl/install)
+
+### How to setup the environment
+
+1. **Create a virtual environment** (if you don't already have one):
+
+   ```bash
+   uv venv
+   ```
+
+1. **Install dependencies**:
+
+   ```bash
+   uv sync
+   ```
+
+   This installs both the main project dependencies and the `dev` group (`pytest`,
+   `Jupyter`, etc.).
+   Do this after each `git pull` to be sure to install new dependencies.
+
+1. **Activate the virtual environment**:
+
+   ```bash
+   source .venv/bin/activate
+   ```
+
+### Useful commands
+
+The makes commands will probbly fail on a Windows environment (maybe try with Git Bash).
+
+
+| Task | Command |
+|------|---------|
+| Run tests | `make tests` |
+| Lint the code (using [`ruff`](https://docs.astral.sh/ruff/) ) | `make check` |
+| Format the code (also clean notebooks outputs) | `make format` |
+| Execute notebooks and export to html | `make notebooks_html` |
+| Add a new dependency | `uv add <package>` |
+| Add a dev dependency | `uv add --dev <package>` |
+
+
+### Nix (optional)
+
+If you use [Nix](https://nixos.org/) and [direnv](https://direnv.net/), the flake will
+automatically set up the Python environment and install dependencies for you when you
+`cd` in the repo.
+
+Run `direnv allow` in the project root. The `.envrc` file will create the virtual
+environment and run `uv sync` automatically whenever you enter the directory.
