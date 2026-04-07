@@ -1,0 +1,56 @@
+[project]
+name = "convcgp"
+version = "0.1.0"
+description = "A Convolutional Neural Network to Predict Genotypic Values of Rice Traits from Compressed Genome-Wide Polymorphisms"
+readme = "README.md"
+authors = [
+    { name = "Tanzila Islam", email = "tanzilamohita@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.4",
+    "pandas>=3.0.2",
+    "scikit-learn>=1.8.0",
+    "tensorflow>=2.21.0",
+]
+
+[dependency-groups]
+dev = [
+  {include-group = "lint_lsp_formatter"},
+  {include-group = "test"},
+  "ipykernel>=7.2.0",
+  "jupyter>=1.1.1",
+  "jupytext>=1.19.1",
+]
+test = [
+    "pytest>=9.0.2",
+]
+lint_lsp_formatter = [
+    "black>=26.3.1",
+    "isort>=8.0.1",
+    "ruff>=0.15.9",
+    "types-tensorflow>=2.18.0.20260402",
+]
+
+[tool.ruff.lint]
+extend-select = [
+  "C4",  # flake8-comprehensions cf. https://docs.astral.sh/ruff/rules/#flake8-comprehensions-c4
+  "DJ",  # flake8-django cf. https://docs.astral.sh/ruff/rules/#flake8-django-dj
+  "N",   # pep8-naming cf. https://docs.astral.sh/ruff/rules/#pep8-naming-n
+  "S",   # flake8-bandit  cf. https://docs.astral.sh/ruff/rules/#flake8-bandit-s
+  "SIM", # flake8-simplify cf. https://docs.astral.sh/ruff/rules/#flake8-simplify-sim
+  "UP",  # pyupgrade cf. https://docs.astral.sh/ruff/rules/#pyupgrade-up
+  "E",   # pycodestyle error cf. https://docs.astral.sh/ruff/rules/#error-e
+  "W",   # pycodestyle warnings cf. https://docs.astral.sh/ruff/rules/#warning-w
+  "DOC", # pydoclint cf. https://docs.astral.sh/ruff/rules/#pydoclint-doc
+  "D",   # pydocstyle cf. https://docs.astral.sh/ruff/rules/#pydocstyle-d
+]
+
+[tool.ruff.lint.per-file-ignores]
+"./tests/test_**.py" = [
+  "D", # pydocstyle
+]
+
+[tool.pyright]
+"typeCheckingMode" = "basic"

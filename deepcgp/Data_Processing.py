@@ -5,12 +5,13 @@
 
 import numpy as np
 
+
 def one_hot_encode_snp_array(snp_array):
     encoding_map = {
-        'A': [1, 0, 0, 0],
-        'C': [0, 1, 0, 0],
-        'G': [0, 0, 1, 0],
-        'T': [0, 0, 0, 1]
+        "A": [1, 0, 0, 0],
+        "C": [0, 1, 0, 0],
+        "G": [0, 0, 1, 0],
+        "T": [0, 0, 0, 1],
     }
     onehotlabels = []
     for row in snp_array:
