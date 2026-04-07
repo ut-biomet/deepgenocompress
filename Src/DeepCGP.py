@@ -22,8 +22,12 @@ else:
 
 # ============ Autoencoder Model ============
 def build_autoencoder(input_dim, compress):
+    # No documentation
     h1, h2, bottleneck = compress
     input_layer = Input(shape=(input_dim,))
+
+    # is there specific reason to hard code 3 layers instead of using the
+    # length of `compress` ?
     encoded = Dense(h1, activation='relu')(input_layer)
     encoded = Dense(h2, activation='relu')(encoded)
     encoded = Dense(bottleneck, activation='sigmoid')(encoded)
@@ -56,6 +60,7 @@ def compress_single_chromosome(path, best_config):
         print(f"→ Chunk {i + 1}/{len(split_chunks)}")
         x_train, x_mid = train_test_split(chunk, test_size=0.4, random_state=42)
         x_test, x_valid = train_test_split(x_mid, test_size=0.5, random_state=42)
+        # `x_test` is not used
 
         autoencoder, encoder = build_autoencoder(input_dim, compress)
         autoencoder.compile(optimizer=Adam(learning_rate=lr), loss='mse')
@@ -81,7 +86,7 @@ def compress_single_chromosome(path, best_config):
 
 
 def compress_data(X, best_config, seed=42, verbose=True):
-
+    # description of each of those parameters (and their effects) would be nice
     input_dim  = best_config["InputDim"]
     compress   = best_config["Compress"]
     batch_size = best_config["BatchSize"]
@@ -89,9 +94,15 @@ def compress_data(X, best_config, seed=42, verbose=True):
     epochs     = best_config["Epochs"]
 
     X = X.astype(np.float32)
+    # X is created by one_hot_encode_snp_array which uses `dtype=np.uint8`
+    # X is only 1 and 0, is there a specific reason to switch to float32 ?
 
     n_chunks = X.shape[1] // input_dim
     if n_chunks == 0:
+        # rather that testing the effect, test the cause eg.
+        # if input_dim > X.shape[1]:
+        #   raise ValueError(f"{input_dim=} must be lower or equal to {X.shape[1]=}")
+        # n_chunks = X.shape[1] // input_dim
         raise ValueError(f"X has {X.shape[1]} features < InputDim={input_dim}")
 
     usable = n_chunks * input_dim
@@ -101,12 +112,15 @@ def compress_data(X, best_config, seed=42, verbose=True):
     split_chunks = np.hsplit(X[:, :usable], n_chunks)
 
     encoded_chunks = []
+    # this loop is repeated in `compress_single_chromosome`
+    # having a dedicated function would avoid repetition
     for i, chunk in enumerate(split_chunks):
         if verbose:
             print(f"→ Chunk {i+1}/{len(split_chunks)} | chunk shape={chunk.shape}")
 
         x_train, x_mid = train_test_split(chunk, test_size=0.4, random_state=seed)
         x_test, x_valid = train_test_split(x_mid, test_size=0.5, random_state=seed)
+        # `x_test` is not used
 
         autoencoder, encoder = build_autoencoder(input_dim, compress)
         autoencoder.compile(optimizer=Adam(learning_rate=lr), loss="mse")
