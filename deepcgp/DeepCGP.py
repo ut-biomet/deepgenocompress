@@ -4,16 +4,17 @@
 # ===============================
 
 import os
+
 import numpy as np
+import tensorflow as tf
 from sklearn.model_selection import train_test_split
 from tensorflow.keras import Input, Model
+from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import EarlyStopping
-import tensorflow as tf
 
 # for gpu use
-gpus = tf.config.list_physical_devices('GPU')
+gpus = tf.config.list_physical_devices("GPU")
 if gpus:
     print(f"GPU is available: {gpus}")
 else:
@@ -24,25 +25,25 @@ else:
 def build_autoencoder(input_dim, compress):
     h1, h2, bottleneck = compress
     input_layer = Input(shape=(input_dim,))
-    encoded = Dense(h1, activation='relu')(input_layer)
-    encoded = Dense(h2, activation='relu')(encoded)
-    encoded = Dense(bottleneck, activation='sigmoid')(encoded)
-    decoded = Dense(h2, activation='relu')(encoded)
-    decoded = Dense(h1, activation='relu')(decoded)
-    decoded = Dense(input_dim, activation='sigmoid')(decoded)
+    encoded = Dense(h1, activation="relu")(input_layer)
+    encoded = Dense(h2, activation="relu")(encoded)
+    encoded = Dense(bottleneck, activation="sigmoid")(encoded)
+    decoded = Dense(h2, activation="relu")(encoded)
+    decoded = Dense(h1, activation="relu")(decoded)
+    decoded = Dense(input_dim, activation="sigmoid")(decoded)
     autoencoder = Model(input_layer, decoded)
     encoder = Model(input_layer, encoded)
     return autoencoder, encoder
 
 
 def compress_single_chromosome(path, best_config):
-    input_dim = best_config['InputDim']
-    compress = best_config['Compress']
-    batch_size = best_config['BatchSize']
-    lr = best_config['LearningRate']
-    epochs = best_config['Epochs']
+    input_dim = best_config["InputDim"]
+    compress = best_config["Compress"]
+    batch_size = best_config["BatchSize"]
+    lr = best_config["LearningRate"]
+    epochs = best_config["Epochs"]
 
-    chr_name = os.path.basename(path).replace(f'_C2.npy', '')
+    chr_name = os.path.basename(path).replace(f"_C2.npy", "")
     print(f"\nProcessing {chr_name} ...")
     chr_data = np.load(path, allow_pickle=True).astype(np.float32)
 
@@ -58,16 +59,19 @@ def compress_single_chromosome(path, best_config):
         x_test, x_valid = train_test_split(x_mid, test_size=0.5, random_state=42)
 
         autoencoder, encoder = build_autoencoder(input_dim, compress)
-        autoencoder.compile(optimizer=Adam(learning_rate=lr), loss='mse')
-        early_stop = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+        autoencoder.compile(optimizer=Adam(learning_rate=lr), loss="mse")
+        early_stop = EarlyStopping(
+            monitor="val_loss", patience=5, restore_best_weights=True
+        )
 
         autoencoder.fit(
-            x_train, x_train,
+            x_train,
+            x_train,
             epochs=epochs,
             batch_size=batch_size,
             validation_data=(x_valid, x_valid),
             callbacks=[early_stop],
-            verbose=0
+            verbose=0,
         )
 
         # Encode the current chunk
@@ -82,11 +86,11 @@ def compress_single_chromosome(path, best_config):
 
 def compress_data(X, best_config, seed=42, verbose=True):
 
-    input_dim  = best_config["InputDim"]
-    compress   = best_config["Compress"]
+    input_dim = best_config["InputDim"]
+    compress = best_config["Compress"]
     batch_size = best_config["BatchSize"]
-    lr         = best_config["LearningRate"]
-    epochs     = best_config["Epochs"]
+    lr = best_config["LearningRate"]
+    epochs = best_config["Epochs"]
 
     X = X.astype(np.float32)
 
@@ -96,7 +100,9 @@ def compress_data(X, best_config, seed=42, verbose=True):
 
     usable = n_chunks * input_dim
     if usable != X.shape[1] and verbose:
-        print(f"Dropping last {X.shape[1] - usable} feature(s) to fit InputDim={input_dim}.")
+        print(
+            f"Dropping last {X.shape[1] - usable} feature(s) to fit InputDim={input_dim}."
+        )
 
     split_chunks = np.hsplit(X[:, :usable], n_chunks)
 
@@ -110,15 +116,18 @@ def compress_data(X, best_config, seed=42, verbose=True):
 
         autoencoder, encoder = build_autoencoder(input_dim, compress)
         autoencoder.compile(optimizer=Adam(learning_rate=lr), loss="mse")
-        early_stop = EarlyStopping(monitor="val_loss", patience=5, restore_best_weights=True)
+        early_stop = EarlyStopping(
+            monitor="val_loss", patience=5, restore_best_weights=True
+        )
 
         autoencoder.fit(
-            x_train, x_train,
+            x_train,
+            x_train,
             epochs=epochs,
             batch_size=batch_size,
             validation_data=(x_valid, x_valid),
             callbacks=[early_stop],
-            verbose=0
+            verbose=0,
         )
 
         encoded = encoder.predict(chunk, batch_size=batch_size, verbose=0)
@@ -129,5 +138,3 @@ def compress_data(X, best_config, seed=42, verbose=True):
         print("Final compressed shape:", compressed_array.shape)
 
     return compressed_array
-
-
