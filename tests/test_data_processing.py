@@ -1,0 +1,257 @@
+import numpy as np
+import pytest
+from pytest_mock import MockerFixture
+
+from deepcgp.data_processing import (
+    _validate_encoding_map,
+    build_one_hot_encoding_map,
+    encode_snp_array,
+)
+
+
+@pytest.fixture
+def basic_geno_array():
+    return np.array(
+        [
+            ["G", "A", "T", "T", "A", "C", "A"],
+            ["A", "C", "A", "T", "T", "A", "G"],
+            ["T", "A", "G", "G", "T", "C", "A"],
+        ]
+    )
+
+
+class TestValidateEncodingMap:
+    """Tests for _validate_encoding_map functions"""
+
+    def test_raise_if_not_dict(self):
+        encoding_map = [[0, 0, 1], [0, 0, 1], [0, 0, 1]]
+        with pytest.raises(TypeError, match="must be a dict"):
+            _validate_encoding_map(encoding_map)  # pyright: ignore [reportArgumentType]
+
+    def test_raise_if_encodings_are_not_list(self):
+        encoding_map = {
+            "A": (0, 0, 1),
+            "B": (0, 1, 0),
+            "C": (1, 0, 0),
+        }
+        with pytest.raises(ValueError, match="must be a list"):
+            _validate_encoding_map(encoding_map)  # pyright: ignore [reportArgumentType]
+
+    def test_raise_if_encodings_have_different_lengths(self):
+        encoding_map = {
+            "A": [1],
+            "B": [0, 1],
+            "C": [0, 0, 1],
+        }
+        with pytest.raises(ValueError, match="must have the same length"):
+            _validate_encoding_map(encoding_map)
+
+    def test_raise_if_encodings_are_not_int(self):
+        encoding_map = {
+            "A": ["0", "0", "1"],
+            "B": ["0", "1", "0"],
+            "C": ["1", "0", "0"],
+        }
+        with pytest.raises(ValueError, match="must be a list of numerical values"):
+            _validate_encoding_map(encoding_map)  # pyright: ignore [reportArgumentType]
+
+    def test_return_none(self):
+        encoding_map = {
+            "A": [1, 0, 0],
+            "B": [0, 1, 0],
+            "C": [0, 0, 1],
+        }
+        assert _validate_encoding_map(encoding_map) is None
+
+    def test_pass_with_float(self):
+        encoding_map = {
+            "A": [1.0, 0, 0],
+            "B": [0, 1.0, 0],
+            "C": [0, 0, 1.0],
+        }
+        _validate_encoding_map(encoding_map)
+
+    def test_pass_with_non_str_keys(self):
+        encoding_map = {
+            0: [1, 0, 0],
+            1: [0, 1, 0],
+            2: [0, 0, 1],
+        }
+        _validate_encoding_map(encoding_map)
+
+    def test_pass_with_duplicate_encodings(self):
+        """To accept "synonyms"."""
+        encoding_map = {
+            "A": [1, 0, 0],
+            "B": [0, 1, 0],  # <- same
+            "C": [0, 1, 0],  # <- same
+        }
+        _validate_encoding_map(encoding_map)
+
+
+class TestBuildOneHotEncodingMap:
+    """Tests for build_one_hot_encoding_map functions"""
+
+    def test_returns_dict(self, basic_geno_array):
+        result = build_one_hot_encoding_map(basic_geno_array)
+        assert isinstance(result, dict)
+
+    def test_correct_keys(self, basic_geno_array):
+        result = build_one_hot_encoding_map(basic_geno_array)
+        assert set(result.keys()) == {"A", "C", "G", "T"}
+
+    def test_encoding_length_matches_number_of_alleles(self, basic_geno_array):
+        result = build_one_hot_encoding_map(basic_geno_array)
+        n = len(result)
+        assert all(len(encoding) == n for encoding in result.values())
+
+    def test_encoding_is_one_hot(self, basic_geno_array):
+        result = build_one_hot_encoding_map(basic_geno_array)
+        for encoding in result.values():
+            assert sum(encoding) == 1
+            assert set(encoding) == {0, 1}
+
+    def test_encodings_are_unique(self, basic_geno_array):
+        result = build_one_hot_encoding_map(basic_geno_array)
+        encodings = [tuple(encoding) for encoding in result.values()]
+        assert len(encodings) == len(set(encodings))
+
+    def test_with_single_allele(self):
+        result = build_one_hot_encoding_map(np.array([["A", "A", "A"]]))
+        assert result == {"A": [1]}
+
+    def test_deterministic_regardless_of_order(self):
+        array1 = np.array([["A", "C", "G", "T"]])
+        array2 = np.array([["T", "G", "C", "A"]])
+        assert build_one_hot_encoding_map(array1) == build_one_hot_encoding_map(array2)
+
+    def test_pass_validate_encoding_map(self, basic_geno_array):
+        result = build_one_hot_encoding_map(basic_geno_array)
+        assert _validate_encoding_map(result) is None
+
+
+class TestEncodeSnpArray:
+    """Tests for encode_snp_array functions"""
+
+    @pytest.fixture
+    def basic_encoding_map(self):
+        enc_map = {
+            "A": [1, 0, 0, 0],
+            "C": [0, 1, 0, 0],
+            "G": [0, 0, 1, 0],
+            "T": [0, 0, 0, 1],
+        }
+        _validate_encoding_map(enc_map)
+        return enc_map
+
+    def test_call_build_one_hot_encoding_map_when_no_encoding_map(
+        self, basic_geno_array, mocker: MockerFixture
+    ):
+        """Test build_one_hot_encoding_map is called encoding_map is not provided."""
+        mock_build_one_hot_encoding_map = mocker.patch(
+            "deepcgp.data_processing.build_one_hot_encoding_map",
+            wraps=build_one_hot_encoding_map,
+        )
+        encode_snp_array(basic_geno_array)
+        mock_build_one_hot_encoding_map.assert_called_once_with(basic_geno_array)
+
+    def test_call_build_one_hot_encoding_map_when_encoding_map_is_none(
+        self, basic_geno_array, mocker: MockerFixture
+    ):
+        """Test build_one_hot_encoding_map is called encoding_map is None."""
+        mock_build_one_hot_encoding_map = mocker.patch(
+            "deepcgp.data_processing.build_one_hot_encoding_map",
+            wraps=build_one_hot_encoding_map,
+        )
+        encode_snp_array(basic_geno_array, encoding_map=None)
+        mock_build_one_hot_encoding_map.assert_called_once_with(basic_geno_array)
+
+    def test_call_validate_encoding_map(
+        self, basic_geno_array, basic_encoding_map, mocker: MockerFixture
+    ):
+        """Test _validate_encoding_map is called encoding_map is provided."""
+        mock_validate = mocker.patch(
+            "deepcgp.data_processing._validate_encoding_map",
+            wraps=_validate_encoding_map,
+        )
+        encode_snp_array(basic_geno_array, encoding_map=basic_encoding_map)
+        mock_validate.assert_called_once_with(basic_encoding_map)
+
+    def test_use_correct_encoding(self, basic_encoding_map):
+        geno_a = np.array([["A"]])
+        result_a = encode_snp_array(geno_a, encoding_map=basic_encoding_map)
+        np.testing.assert_array_equal(result_a, np.array([basic_encoding_map["A"]]))
+
+        geno_c = np.array([["C"]])
+        result_c = encode_snp_array(geno_c, encoding_map=basic_encoding_map)
+        np.testing.assert_array_equal(result_c, np.array([basic_encoding_map["C"]]))
+
+        geno_g = np.array([["G"]])
+        result_g = encode_snp_array(geno_g, encoding_map=basic_encoding_map)
+        np.testing.assert_array_equal(result_g, np.array([basic_encoding_map["G"]]))
+
+        geno_t = np.array([["T"]])
+        result_t = encode_snp_array(geno_t, encoding_map=basic_encoding_map)
+        np.testing.assert_array_equal(result_t, np.array([basic_encoding_map["T"]]))
+
+    def test_unrecognized_allele_are_encoded_with_vector_of_0(self, basic_encoding_map):
+        encoding_values_len = len(basic_encoding_map["A"])
+        geno_unkown = np.array([["N"]])
+        result = encode_snp_array(geno_unkown, encoding_map=basic_encoding_map)
+        np.testing.assert_array_equal(result, np.array([[0] * encoding_values_len]))
+
+    def test_missing_allele_are_encoded_with_vector_of_0(self, basic_encoding_map):
+        """Missing allele as empty string"""
+        encoding_values_len = len(basic_encoding_map["A"])
+        geno_unkown = np.array([[""]])
+        result = encode_snp_array(geno_unkown, encoding_map=basic_encoding_map)
+        np.testing.assert_array_equal(result, np.array([[0] * encoding_values_len]))
+
+    def test_use_correct_dtype(self, basic_geno_array, basic_encoding_map):
+        result = encode_snp_array(basic_geno_array, encoding_map=basic_encoding_map)
+        assert result.dtype == np.float32
+
+    def test_with_empty_array(self, basic_encoding_map):
+        geno_empty = np.array([[]])
+        result = encode_snp_array(geno_empty, encoding_map=basic_encoding_map)
+        np.testing.assert_array_equal(result, np.array([[]]))
+
+    def test_with_single_row(self, basic_encoding_map):
+        em = basic_encoding_map
+        geno = np.array([["G", "A", "T"]])
+        result = encode_snp_array(geno, encoding_map=basic_encoding_map)
+
+        expected = np.array([em["G"] + em["A"] + em["T"]])
+        np.testing.assert_array_equal(result, expected)
+
+    def test_with_single_column(self, basic_encoding_map):
+        em = basic_encoding_map
+        geno = np.array([["G"], ["A"], ["T"]])
+        expected = np.array([em["G"], em["A"], em["T"]])
+        result = encode_snp_array(geno, encoding_map=basic_encoding_map)
+
+        np.testing.assert_array_equal(result, expected)
+
+    def test_with_multiple_rows_columns(self, basic_encoding_map):
+        em = basic_encoding_map
+        geno = np.array(
+            [
+                ["G", "A", "T", "T"],
+                ["A", "C", "A", "A"],
+            ]
+        )
+        expected = np.array(
+            [
+                em["G"] + em["A"] + em["T"] + em["T"],
+                em["A"] + em["C"] + em["A"] + em["A"],
+            ]
+        )
+        result = encode_snp_array(geno, encoding_map=basic_encoding_map)
+        np.testing.assert_array_equal(result, expected)
+
+
+def test_public_api_exports():
+    import deepcgp
+
+    assert hasattr(deepcgp, "encode_snp_array")
+    assert hasattr(deepcgp, "build_one_hot_encoding_map")
