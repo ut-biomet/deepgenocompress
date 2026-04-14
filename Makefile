@@ -1,5 +1,6 @@
 .PHONY: format
 .PHONY: checks
+.PHONY: tests
 .PHONY: notebooks_html
 
 format:
@@ -11,6 +12,9 @@ format:
 check:
 	ruff check .
 	basedpywright .
+
+tests:
+	pytest -v
 
 notebooks_html:
 	git ls-files -- "*.ipynb" | xargs jupyter nbconvert --to notebook --execute --inplace

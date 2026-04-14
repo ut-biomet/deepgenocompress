@@ -19,6 +19,10 @@
         devShells.default = pkgs.mkShell rec {
           XLA_FLAGS = "--xla_gpu_cuda_data_dir=${pkgs.cudaPackages.cudatoolkit}";
 
+          # trouble with ruff, NixOS cannot run dynamically linked executables
+          # do not install them an use the nix packages instead
+          UV_NO_GROUP = "lint_lsp_formatter";
+
           buildInputs = with pkgs; [
             bashInteractive
             pyPkgs.python
