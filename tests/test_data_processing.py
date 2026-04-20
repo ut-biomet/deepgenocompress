@@ -1,3 +1,6 @@
+import re
+from itertools import cycle
+
 import numpy as np
 import pytest
 from pytest_mock import MockerFixture
@@ -16,6 +19,42 @@ def basic_geno_array():
             ["G", "A", "T", "T", "A", "C", "A"],
             ["A", "C", "A", "T", "T", "A", "G"],
             ["T", "A", "G", "G", "T", "C", "A"],
+        ]
+    )
+
+
+@pytest.fixture(
+    params=[["N"], ["N", "."]],
+    ids=["one missing value: N", "two missing values: N and ."],
+)
+def missing_values_fixt(request):
+    return request.param
+
+
+@pytest.fixture
+def basic_geno_array_with_missing_values(missing_values_fixt):
+    """Build geno array with missing values by cycling the given list of missing values.
+
+    eg. with ``["N"]`` (default) returns (ACGT masked):
+        [
+            [   , "N",    ,    ,    , "N",    ],
+            [   , "N",    ,    ,    ,    ,    ],
+            [   ,    ,    ,    , "N",    ,    ],
+        ]
+    eg. with ``["N", "."]`` returns (ACGT masked):
+        [
+            [   , "N",    ,    ,    , ".",    ],
+            [   , "N",    ,    ,    ,    ,    ],
+            [   ,    ,    ,    , ".",    ,    ],
+        ]
+    """
+    assert isinstance(missing_values_fixt, list)
+    m = cycle(missing_values_fixt).__next__
+    return np.array(
+        [
+            ["G", m(), "T", "T", "A", m(), "A"],
+            ["A", m(), "A", "T", "T", "A", "G"],
+            ["T", "A", "G", "G", m(), "C", "A"],
         ]
     )
 
@@ -46,7 +85,7 @@ class TestValidateEncodingMap:
         with pytest.raises(ValueError, match="must have the same length"):
             _validate_encoding_map(encoding_map)
 
-    def test_raise_if_encodings_are_not_int(self):
+    def test_raise_if_encodings_are_not_int_or_float(self):
         encoding_map = {
             "A": ["0", "0", "1"],
             "B": ["0", "1", "0"],
@@ -55,7 +94,7 @@ class TestValidateEncodingMap:
         with pytest.raises(ValueError, match="must be a list of numerical values"):
             _validate_encoding_map(encoding_map)  # pyright: ignore [reportArgumentType]
 
-    def test_return_none(self):
+    def test_return_none_when_valid(self):
         encoding_map = {
             "A": [1, 0, 0],
             "B": [0, 1, 0],
@@ -63,7 +102,7 @@ class TestValidateEncodingMap:
         }
         assert _validate_encoding_map(encoding_map) is None
 
-    def test_pass_with_float(self):
+    def test_pass_with_float_values(self):
         encoding_map = {
             "A": [1.0, 0, 0],
             "B": [0, 1.0, 0],
@@ -87,6 +126,30 @@ class TestValidateEncodingMap:
             "C": [0, 1, 0],  # <- same
         }
         _validate_encoding_map(encoding_map)
+
+    def test_raise_when_missing_values_not_a_0_vector(self):
+        encoding_map = {
+            "A": [1, 0, 0],
+            "B": [0, 1, 0],
+            ".": [0, 0, 1],
+        }
+
+        with pytest.raises(
+            ValueError,
+            match=re.escape(
+                "Missing values not encoded with a vector of 0, for '.' got [0, 0, 1]."
+            ),
+        ):
+            _validate_encoding_map(encoding_map, missing_values=["."])
+
+    def test_pass_when_missing_values_is_a_0_vector(self):
+        encoding_map = {
+            "A": [1, 0, 0],
+            "B": [0, 1, 0],
+            ".": [0, 0, 0],
+        }
+
+        assert _validate_encoding_map(encoding_map, missing_values=["."]) is None
 
 
 class TestBuildOneHotEncodingMap:
@@ -129,6 +192,44 @@ class TestBuildOneHotEncodingMap:
         result = build_one_hot_encoding_map(basic_geno_array)
         assert _validate_encoding_map(result) is None
 
+    @pytest.mark.parametrize(
+        "missing_values_fixt",
+        [["N"]],
+        ids=["one missing value: N"],
+    )
+    def test_default_exclusion(
+        self, missing_values_fixt, basic_geno_array_with_missing_values
+    ):
+        result = build_one_hot_encoding_map(basic_geno_array_with_missing_values)
+        assert _validate_encoding_map(result) is None
+        assert all(m not in result for m in missing_values_fixt)
+        assert result == {
+            "A": [1, 0, 0, 0],
+            "C": [0, 1, 0, 0],
+            "G": [0, 0, 1, 0],
+            "T": [0, 0, 0, 1],
+        }
+
+    @pytest.mark.parametrize(
+        "missing_values_fixt",
+        [["X"], ["-", ".", "NA"]],
+        ids=["one missing value: X", "three missing values: -, . and NA"],
+    )
+    def test_exclusion_of_missing_values(
+        self, missing_values_fixt, basic_geno_array_with_missing_values
+    ):
+        result = build_one_hot_encoding_map(
+            basic_geno_array_with_missing_values, exclude=missing_values_fixt
+        )
+        assert _validate_encoding_map(result) is None
+        assert all(m not in result for m in missing_values_fixt)
+        assert result == {
+            "A": [1, 0, 0, 0],
+            "C": [0, 1, 0, 0],
+            "G": [0, 0, 1, 0],
+            "T": [0, 0, 0, 1],
+        }
+
 
 class TestEncodeSnpArray:
     """Tests for encode_snp_array functions"""
@@ -144,38 +245,64 @@ class TestEncodeSnpArray:
         _validate_encoding_map(enc_map)
         return enc_map
 
-    def test_call_build_one_hot_encoding_map_when_no_encoding_map(
+    def test_call_build_one_hot_encoding_with_default_params(
         self, basic_geno_array, mocker: MockerFixture
     ):
-        """Test build_one_hot_encoding_map is called encoding_map is not provided."""
+        """Test build_one_hot_encoding_map is called with default parameters."""
         mock_build_one_hot_encoding_map = mocker.patch(
             "deepcgp.data_processing.build_one_hot_encoding_map",
             wraps=build_one_hot_encoding_map,
         )
         encode_snp_array(basic_geno_array)
-        mock_build_one_hot_encoding_map.assert_called_once_with(basic_geno_array)
+        mock_build_one_hot_encoding_map.assert_called_once_with(
+            basic_geno_array,
+            {"N"},  # default for `missing_values`
+        )
 
-    def test_call_build_one_hot_encoding_map_when_encoding_map_is_none(
-        self, basic_geno_array, mocker: MockerFixture
+    @pytest.mark.parametrize(
+        "missing_values_fixt",
+        [["X"], ["-", ".", "NA"]],
+        ids=["one missing value: X", "three missing values: -, . and NA"],
+    )
+    def test_call_build_one_hot_encoding_map_with_provided_missing_values(
+        self, missing_values_fixt, basic_geno_array, mocker: MockerFixture
     ):
-        """Test build_one_hot_encoding_map is called encoding_map is None."""
+        """Test build_one_hot_encoding_map is called if encoding_map is None."""
         mock_build_one_hot_encoding_map = mocker.patch(
             "deepcgp.data_processing.build_one_hot_encoding_map",
             wraps=build_one_hot_encoding_map,
         )
-        encode_snp_array(basic_geno_array, encoding_map=None)
-        mock_build_one_hot_encoding_map.assert_called_once_with(basic_geno_array)
+        encode_snp_array(
+            basic_geno_array, missing_values=missing_values_fixt, encoding_map=None
+        )
+        mock_build_one_hot_encoding_map.assert_called_once_with(
+            basic_geno_array,
+            missing_values_fixt,
+        )
 
+    @pytest.mark.parametrize(
+        "missing_values_fixt",
+        [["X"], ["-", ".", "NA"]],
+        ids=["one missing value: X", "three missing values: -, . and NA"],
+    )
     def test_call_validate_encoding_map(
-        self, basic_geno_array, basic_encoding_map, mocker: MockerFixture
+        self,
+        missing_values_fixt,
+        basic_geno_array,
+        basic_encoding_map,
+        mocker: MockerFixture,
     ):
         """Test _validate_encoding_map is called encoding_map is provided."""
         mock_validate = mocker.patch(
             "deepcgp.data_processing._validate_encoding_map",
             wraps=_validate_encoding_map,
         )
-        encode_snp_array(basic_geno_array, encoding_map=basic_encoding_map)
-        mock_validate.assert_called_once_with(basic_encoding_map)
+        encode_snp_array(
+            basic_geno_array,
+            missing_values=missing_values_fixt,
+            encoding_map=basic_encoding_map,
+        )
+        mock_validate.assert_called_once_with(basic_encoding_map, missing_values_fixt)
 
     def test_use_correct_encoding(self, basic_encoding_map):
         geno_a = np.array([["A"]])
@@ -194,11 +321,11 @@ class TestEncodeSnpArray:
         result_t = encode_snp_array(geno_t, encoding_map=basic_encoding_map)
         np.testing.assert_array_equal(result_t, np.array([basic_encoding_map["T"]]))
 
-    def test_unrecognized_allele_are_encoded_with_vector_of_0(self, basic_encoding_map):
-        encoding_values_len = len(basic_encoding_map["A"])
         geno_unkown = np.array([["N"]])
         result = encode_snp_array(geno_unkown, encoding_map=basic_encoding_map)
-        np.testing.assert_array_equal(result, np.array([[0] * encoding_values_len]))
+        np.testing.assert_array_equal(
+            result, np.array([[0] * len(basic_encoding_map["A"])])
+        )
 
     def test_missing_allele_are_encoded_with_vector_of_0(self, basic_encoding_map):
         """Missing allele as empty string"""
@@ -234,16 +361,17 @@ class TestEncodeSnpArray:
 
     def test_with_multiple_rows_columns(self, basic_encoding_map):
         em = basic_encoding_map
+        em["N"] = [0, 0, 0, 0]
         geno = np.array(
             [
-                ["G", "A", "T", "T"],
-                ["A", "C", "A", "A"],
+                ["G", "A", "N", "T"],  # <- "N" explicitly in encoding map as 0s
+                ["A", ".", "A", "A"],  # <- "." not in encoding map
             ]
         )
         expected = np.array(
             [
-                em["G"] + em["A"] + em["T"] + em["T"],
-                em["A"] + em["C"] + em["A"] + em["A"],
+                em["G"] + em["A"] + [0] * 4 + em["T"],
+                em["A"] + [0] * 4 + em["A"] + em["A"],
             ]
         )
         result = encode_snp_array(geno, encoding_map=basic_encoding_map)
