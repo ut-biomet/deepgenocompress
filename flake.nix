@@ -43,7 +43,6 @@
             # some shared libraries needed (uv/poetry etc... do not install them)
             stdenv.cc.cc.lib
             zlib # for numpy
-            linuxPackages.nvidia_x11 # for cuda/tensorflow
           ];
           venvDir = "./.venv";
           postVenvCreation = ''
@@ -51,7 +50,14 @@
           '';
 
           postShellHook = ''
-            export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath buildInputs}:$LD_LIBRARY_PATH"
+            export LD_LIBRARY_PATH="${
+              pkgs.lib.makeLibraryPath (
+                [
+                  "/run/opengl-driver" # Needed to find cuda related `.so`
+                ]
+                ++ buildInputs
+              )
+            }:$LD_LIBRARY_PATH"
             uv sync
           '';
         };
