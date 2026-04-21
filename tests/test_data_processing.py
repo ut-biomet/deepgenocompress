@@ -23,10 +23,13 @@ def basic_geno_array():
     )
 
 
-@pytest.fixture(
-    params=[["N"], ["N", "."]],
-    ids=["one missing value: N", "two missing values: N and ."],
-)
+MISSING_VALUES_CASES = [
+    pytest.param(["N"], id="one missing value: N"),
+    pytest.param(["N", "."], id="two missing values: N and ."),
+]
+
+
+@pytest.fixture(params=MISSING_VALUES_CASES)
 def missing_values_fixt(request):
     return request.param
 
