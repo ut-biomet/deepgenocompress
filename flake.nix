@@ -19,6 +19,10 @@
         devShells.default = pkgs.mkShell rec {
           XLA_FLAGS = "--xla_gpu_cuda_data_dir=${pkgs.cudaPackages.cudatoolkit}";
 
+          # trouble with ruff, NixOS cannot run dynamically linked executables
+          # do not install them an use the nix packages instead
+          UV_NO_GROUP = "lint_lsp_formatter";
+
           buildInputs = with pkgs; [
             bashInteractive
             pyPkgs.python
@@ -39,7 +43,6 @@
             # some shared libraries needed (uv/poetry etc... do not install them)
             stdenv.cc.cc.lib
             zlib # for numpy
-            linuxPackages.nvidia_x11 # for cuda/tensorflow
           ];
           venvDir = "./.venv";
           postVenvCreation = ''
@@ -47,7 +50,14 @@
           '';
 
           postShellHook = ''
-            export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath buildInputs}:$LD_LIBRARY_PATH"
+            export LD_LIBRARY_PATH="${
+              pkgs.lib.makeLibraryPath (
+                [
+                  "/run/opengl-driver" # Needed to find cuda related `.so`
+                ]
+                ++ buildInputs
+              )
+            }:$LD_LIBRARY_PATH"
             uv sync
           '';
         };
