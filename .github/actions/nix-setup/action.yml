@@ -2,5 +2,10 @@ name: "Nix Setup"
 runs:
   using: "composite"
   steps:
-      - uses: DeterminateSystems/determinate-nix-action@main
-      - uses: DeterminateSystems/magic-nix-cache-action@main
+    - uses: DeterminateSystems/determinate-nix-action@v3.18.1
+    - uses: DeterminateSystems/magic-nix-cache-action@main
+      with:
+        use-flakehub: "disabled"
+
+    # build the flake environment (cleaner output for other jobs)
+    - run: nix develop --accept-flake-config -c echo "flake initialised"
