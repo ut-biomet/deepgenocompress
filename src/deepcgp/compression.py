@@ -134,8 +134,6 @@ class AutoencoderModels:
         self.autoencoder = Model(inputs=input_layer, outputs=decoder_layers)
 
 
-
-
 def compress_data(X, best_config, seed=42, verbose=True):
 
     input_dim = best_config["InputDim"]
