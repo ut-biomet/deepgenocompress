@@ -1,0 +1,7 @@
+name: "Nix Setup"
+runs:
+  using: "composite"
+  steps:
+      - uses: actions/checkout@v6.0.2
+      - uses: DeterminateSystems/determinate-nix-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
