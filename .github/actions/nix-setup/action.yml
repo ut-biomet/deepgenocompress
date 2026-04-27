@@ -9,3 +9,4 @@ runs:
 
     # build the flake environment (cleaner output for other jobs)
     - run: nix develop --accept-flake-config -c echo "flake initialised"
+      shell: bash
