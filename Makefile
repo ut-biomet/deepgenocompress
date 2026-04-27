@@ -15,9 +15,9 @@ format-check:
 	git ls-files -- "*.py" | xargs black --check --diff
 	git ls-files -- "*.nix" | xargs nixfmt --check
 
-check:
-	ruff check .
-	basedpywright .
+python_checks:
+	git ls-files -- "*.py" | xargs ruff check
+	git ls-files -- "*.py" | xargs basedpywright
 
 tests:
 	pytest -v
