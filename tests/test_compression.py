@@ -23,7 +23,7 @@ def basic_autoencoder_models(layer_sizes):
 
 
 class TestAutoencoderModels:
-    """Tests for `AutoencoderModels` function"""
+    """Tests for `AutoencoderModels` class"""
 
     def test_both_are_keras_models(self, basic_autoencoder_models):
         assert isinstance(basic_autoencoder_models.autoencoder, Model)
@@ -93,10 +93,10 @@ class TestAutoencoderModels:
         assert output_layer.activation.__name__ == "sigmoid"
 
     def test_latent_layer_with_size_one(self):
-        layers_sizes = [20, 16, 8, 1]
-        aem = AutoencoderModels(layers_sizes)
+        layer_sizes = [20, 16, 8, 1]
+        aem = AutoencoderModels(layer_sizes)
         assert aem.encoder.output_shape == (None, 1)
-        assert aem.autoencoder.output_shape == (None, layers_sizes[0])
+        assert aem.autoencoder.output_shape == (None, layer_sizes[0])
 
     def test_input_dim_one(self):
         aem = AutoencoderModels([1, 16, 8, 4])
@@ -108,18 +108,18 @@ class TestAutoencoderModels:
         assert aem.encoder.output_shape == (None, 10)
         assert aem.autoencoder.output_shape == (None, 10)
 
-    def test_raise_if_layers_sizes_is_string(self):
+    def test_raise_if_layer_sizes_is_string(self):
         with pytest.raises(
             TypeError,
-            match="layers_sizes must be a list, or tuple of int got `<class 'str'>`",
+            match="layer_sizes must be a list, or tuple of int got `<class 'str'>`",
         ):
             AutoencoderModels("987")  # pyright: ignore [reportArgumentType]
 
-    def test_raise_if_layers_sizes_lenght_is_lower_than_2(self):
+    def test_raise_if_layer_sizes_lenght_is_lower_than_2(self):
         with pytest.raises(
             ValueError,
             match=re.escape(
-                "layers_sizes length must be greater than 2, got `len(layers_sizes)=1`"
+                "layer_sizes length must be greater than 2, got `len(layer_sizes)=1`"
             ),
         ):
             AutoencoderModels([42])
@@ -128,7 +128,7 @@ class TestAutoencoderModels:
         with pytest.raises(
             ValueError,
             match=re.escape(
-                "layers_sizes must be a list, or tuple of int got `<class 'float'>` "
+                "layer_sizes must be a list, or tuple of int got `<class 'float'>` "
                 "for index layers_sizes[1]."
             ),
         ):

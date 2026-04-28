@@ -25,10 +25,28 @@ Because of symetry this is the same as ``_get_encoder_activation_functions``:
 """
 
 
+def _check_layer_sizes(layer_sizes):
+    """Check layers_sizes's type and value."""
+    if not isinstance(layer_sizes, (list, tuple)):
+        raise TypeError(
+            "layer_sizes must be a list, or tuple of int got " f"`{type(layer_sizes)}`"
+        )
+    if len(layer_sizes) < 2:
+        raise ValueError(
+            "layer_sizes length must be greater than 2, got " f"`{len(layer_sizes)=}`"
+        )
+    for i, ls in enumerate(layer_sizes):
+        if not isinstance(ls, int):
+            raise ValueError(
+                "layer_sizes must be a list, or tuple of int got "
+                f"`{type(layer_sizes[i])}` for index layers_sizes[{i}]."
+            )
+
+
 class AutoencoderModels:
     """Data structure representing an autoencoder and its corresponding encoder.
 
-    The architecture is determined by ``layers_sizes``: the first element is the
+    The architecture is determined by ``layer_sizes``: the first element is the
     input/output dimension, the last is the latent dimension, and the elements
     in between define the encoding layers. The decoder mirrors the encoder in
     reverse.
@@ -38,7 +56,7 @@ class AutoencoderModels:
 
     Parameters
     ----------
-    layers_sizes : list[int] or tuple[int]
+    layer_sizes : list[int] or tuple[int]
         Ordered layer dimensions, e.g. ``[28, 14, 7, 3]`` produces:
         input(28) -> encoding(14, relu) -> encoding(7, relu) -> latent(3, sigmoid)
         -> decoding(7, relu) -> decoding(14, relu) -> output(28, sigmoid).
@@ -47,11 +65,11 @@ class AutoencoderModels:
     Raises
     ------
     TypeError
-        If ``layers_sizes`` is not a list or tuple.
+        If ``layer_sizes`` is not a list or tuple.
     ValueError
-        If ``layers_sizes`` has a length lower than 2.
+        If ``layer_sizes`` has a length lower than 2.
     ValueError
-        If ``layers_sizes``'s values are not integers.
+        If ``layer_sizes``'s values are not integers.
 
     Examples
     --------
@@ -69,37 +87,22 @@ class AutoencoderModels:
     """The encoder model. (Shares same layers with the autoencoder)"""
 
     def __init__(self, layers_sizes: list[int] | tuple[int]):
+    def __init__(self, layer_sizes: list[int] | tuple[int]):
         """Initialise from layers_sizes."""
-        if not isinstance(layers_sizes, (list, tuple)):
-            # pyright: ignore [reportUnreachable]
-            raise TypeError(
-                "layers_sizes must be a list, or tuple of int got "
-                f"`{type(layers_sizes)}`"
-            )
-        if len(layers_sizes) < 2:
-            raise ValueError(
-                "layers_sizes length must be greater than 2, got "
-                f"`{len(layers_sizes)=}`"
-            )
-        for i, ls in enumerate(layers_sizes):
-            if not isinstance(ls, int):
-                raise ValueError(
-                    "layers_sizes must be a list, or tuple of int got "
-                    f"`{type(layers_sizes[i])}` for index layers_sizes[{i}]."
-                )
+        _check_layer_sizes(layer_sizes)
 
         encoder_activation_functions = _default_encoder_activation_functions(
-            layers_sizes
+            layer_sizes
         )
         decoder_activation_functions = _default_decoder_activation_functions(
-            layers_sizes
+            layer_sizes
         )
 
-        input_size = layers_sizes[0]
-        encoding_sizes = layers_sizes[1:-1]
-        laten_size = layers_sizes[-1]
+        input_size = layer_sizes[0]
+        encoding_sizes = layer_sizes[1:-1]
+        laten_size = layer_sizes[-1]
         decoding_sizes = encoding_sizes[::-1]
-        output_size = layers_sizes[0]
+        output_size = layer_sizes[0]
 
         encoding_activations = encoder_activation_functions[:-1]
         latent_activations = encoder_activation_functions[-1]
