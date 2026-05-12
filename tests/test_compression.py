@@ -60,13 +60,7 @@ class TestAutoencoderModels:
         assert len(basic_autoencoder_models.autoencoder.layers) == expected
 
     def test_layer_count_encoder(self, basic_autoencoder_models, layer_sizes):
-        expected = sum(
-            [
-                1,  # input layer
-                len(layer_sizes) - 2,  # ie. - input layer - latent layer
-                1,  # latent layer
-            ]
-        )
+        expected = len(layer_sizes)
         assert len(basic_autoencoder_models.encoder.layers) == expected
 
     def test_encoder_share_same_first_layers_of_autoencoder(
@@ -133,3 +127,7 @@ class TestAutoencoderModels:
             ),
         ):
             AutoencoderModels([42, 3.5])  # pyright: ignore [reportArgumentType]
+
+    def test_is_fitted_is_false(self):
+        assert not AutoencoderModels([4, 3, 2]).is_fitted
+
