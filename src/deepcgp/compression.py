@@ -330,7 +330,7 @@ class CompressionModel:
     @layer_sizes.setter
     def layer_sizes(self, layers_sizes: list[int] | tuple[int, ...]):
         _check_layer_sizes(layers_sizes)
-        if self.training_encoded_geno_array:
+        if self.training_encoded_geno_array is not None:
             _check_layer_sizes_and_data_compatibility(
                 n_cols=self._n_col_train, first_layer_size=layers_sizes[0]
             )
@@ -363,7 +363,7 @@ class CompressionModel:
         validation_size: int | float = 0.5,  # type is important cf train_test_split
     ):
         """Initialise compression model."""
-        self._training_encoded_geno_array = []
+        self._training_encoded_geno_array = None
         self._layer_sizes = []
 
         self.encoding_map = encoding_map
