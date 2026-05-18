@@ -22,7 +22,7 @@ def build_one_hot_encoding_map(
     exclude : Container, optional
         Any object supporting the ``in`` operator (e.g. set, list, tuple).
         Collection of values to exclude from the one-hot encoding map.
-        These typically the values of geno_array representing missing or ambiguous
+        Typically the values of ``geno_array`` representing missing or ambiguous
         genotype calls that should not be assigned an encoding vector.
         Defaults to ``{"N"}``.
 
@@ -153,7 +153,7 @@ def encode_snp_array(
     else:
         encoding_map = build_one_hot_encoding_map(geno_array, missing_values)
 
-    encoding_length = len(list(encoding_map.values())[0])
+    encoding_length = len(next(iter(encoding_map.values())))
 
     encoded_rows = []
     for row in geno_array:
