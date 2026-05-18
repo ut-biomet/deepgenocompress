@@ -153,25 +153,31 @@ class AutoencoderModels:
         self.autoencoder = Model(inputs=input_layer, outputs=decoder_layers)
 
 
-
 def _check_layer_sizes_and_data_compatibility(
     n_cols, first_layer_size, encoding_size=None
 ):
-    # TODO: maybe just warn if we cut the data
     if n_cols % first_layer_size != 0:
-        raise ValueError(
-            f"layer_sizes[0]={first_layer_size} must be a divisor of {n_cols=}"
+        warnings.warn(
+            f"layer_sizes[0]={first_layer_size} is not a divisor of {n_cols=}. "
+            "Column padding (filled with 0) will be added to the end of the data "
+            "to fit requested layer_sizes[0]",
+            UserWarning,
+            stacklevel=2,
         )
 
     if encoding_size is not None:
         if first_layer_size % encoding_size != 0:
-            raise ValueError(
-                f"layer_sizes[0]={first_layer_size} must be a multiple of "
-                f"{encoding_size=}"
+            warnings.warn(
+                f"layer_sizes[0]={first_layer_size} is not a multiple of "
+                f"{encoding_size=}. (ie. each chunk will cut through encoded alleles, "
+                "leaving incomplete encodings at chunk edges)",
+                UserWarning,
+                stacklevel=2,
             )
         if encoding_size == first_layer_size:
             warnings.warn(
-                f"layer_sizes[0]={first_layer_size} is equal to `encoding_size`.",
+                f"layer_sizes[0]={first_layer_size} is equal to `encoding_size` "
+                "(ie. each chunk will consist of only 1 encoded allele).",
                 UserWarning,
                 stacklevel=2,
             )
@@ -194,7 +200,17 @@ def _split_data(
         n_cols=n_cols, first_layer_size=chunk_size, encoding_size=encoding_size
     )
 
-    n_chunks = n_cols // chunk_size
+    remainder = n_cols % chunk_size
+    if remainder != 0:
+        padding_width = chunk_size - remainder
+        encoded_geno_array = np.pad(
+            encoded_geno_array,
+            pad_width=((0, 0), (0, padding_width)),
+            mode="constant",
+            constant_values=0,
+        )
+
+    n_chunks = encoded_geno_array.shape[1] // chunk_size
 
     return np.hsplit(encoded_geno_array, n_chunks)
 

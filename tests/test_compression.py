@@ -171,6 +171,25 @@ def basic_training_data():
     )
 
 
+@pytest.fixture(scope="module")
+def training_data_requiring_padding():
+    ga = np.array(
+        [
+            ["G", "A", "T", "T", "A", "C"],
+            ["A", "C", "A", "T", "T", "A"],
+            ["T", "A", "G", "G", "T", "C"],
+        ]
+    )
+
+    encoding_map = build_one_hot_encoding_map(ga)
+    return TrainingDataFixture(
+        array=ga,
+        encoded_array=encode_snp_array(ga),
+        encoding_map=encoding_map,
+        layer_sizes=[16, 8, 2],  # 16 = 4 alleles * encoding_size (=4)
+    )
+
+
 @pytest.fixture
 def default_compression_model():
     return CompressionModel()
@@ -203,40 +222,54 @@ class Test_check_layer_sizes_and_data_compatibility:
         with pytest.warns(
             UserWarning,
             match=r"layer_sizes\[0\]=8 is equal to `encoding_size`.",
-        ):
+        ) as warn_info:
             assert _check_layer_sizes_and_data_compatibility(64, 8, 8) is True
 
+        expected_message = (
+            "layer_sizes[0]=8 is equal to `encoding_size` "
+            "(ie. each chunk will consist of only 1 encoded allele)."
+        )
+        assert str(warn_info[0].message) == expected_message
+
     # n_cols / first_layer_size related test error
-    def test_raise_when_n_cols_is_not_divisible_by_first_layer_size(self):
-        with pytest.raises(ValueError, match="must be a divisor of n_cols"):
+    def test_warn_when_n_cols_is_not_divisible_by_first_layer_size(self):
+        with pytest.warns(UserWarning, match="is not a divisor of n_cols"):
             _check_layer_sizes_and_data_compatibility(10, 3)
 
-    def test_raise_when_n_cols_is_lower_than_first_layer_size(self):
-        with pytest.raises(ValueError, match="must be a divisor of n_cols"):
+    def test_warn_when_n_cols_is_lower_than_first_layer_size(self):
+        with pytest.warns(UserWarning, match="is not a divisor of n_cols"):
             _check_layer_sizes_and_data_compatibility(5, 10)
 
-    def test_error_message_for_n_cols_first_layer_related_error(self):
-        with pytest.raises(
-            ValueError,
-            match=r"layer_sizes\[0\]=7 must be a divisor of n_cols=13",
-        ):
+    def test_warning_message_for_n_cols_first_layer_related_error(self):
+        with pytest.warns(UserWarning, match="is not a divisor of n_cols") as warn_info:
             _check_layer_sizes_and_data_compatibility(13, 7)
 
+        expected_message = (
+            "layer_sizes[0]=7 is not a divisor of n_cols=13. "
+            "Column padding (filled with 0) will be added to the end of the data "
+            "to fit requested layer_sizes[0]"
+        )
+        assert str(warn_info[0].message) == expected_message
+
     # encoding_size / first_layer_size related error
-    def test_raises_when_encoding_size_not_multiple_of_n_cols(self):
-        with pytest.raises(ValueError, match="must be a multiple of"):
+    def test_warns_when_encoding_size_not_multiple_of_n_cols(self):
+        with pytest.warns(UserWarning, match="is not a multiple of"):
             _check_layer_sizes_and_data_compatibility(100, 10, 3)
 
-    def test_raises_when_encoding_size_larger_than_first_layer(self):
-        with pytest.raises(ValueError, match="must be a multiple of"):
+    def test_warns_when_encoding_size_larger_than_first_layer(self):
+        with pytest.warns(UserWarning, match="is not a multiple of"):
             _check_layer_sizes_and_data_compatibility(100, 10, 20)
 
-    def test_error_message_for_encoding_size_first_layer_related_error(self):
-        with pytest.raises(
-            ValueError,
-            match=r"layer_sizes\[0\]=10 must be a multiple of encoding_size=7",
-        ):
+    def test_warning_message_for_encoding_size_first_layer_related_error(self):
+        with pytest.warns(UserWarning, match=r"is not a multiple of") as warn_info:
             _check_layer_sizes_and_data_compatibility(100, 10, 7)
+
+        expected_message = (
+            "layer_sizes[0]=10 is not a multiple of encoding_size=7. "
+            "(ie. each chunk will cut through encoded alleles, "
+            "leaving incomplete encodings at chunk edges)"
+        )
+        assert str(warn_info[0].message) == expected_message
 
 
 class Test_split_data:
@@ -304,9 +337,31 @@ class Test_split_data:
         n_rows = basic_training_data.encoded_array.shape[0]
         assert all(chunk.shape == (n_rows, 1) for chunk in result)
 
-    # def test_add_padding_with_incompatible_sizes(self):
-    #     # TODO
-    #     pass
+    def test_add_padding_for_incompatible_sizes(
+        self, training_data_requiring_padding: TrainingDataFixture
+    ):
+        n_cols = training_data_requiring_padding.encoded_array.shape[1]
+        chunk_size = training_data_requiring_padding.layer_sizes[0]
+
+        with pytest.warns(UserWarning):
+            result = _split_data(
+                training_data_requiring_padding.encoded_array,
+                training_data_requiring_padding.layer_sizes[0],
+            )
+
+        assert len(result) == (n_cols // chunk_size) + 1
+
+        n_rows = training_data_requiring_padding.encoded_array.shape[0]
+        assert all(chunk.shape == (n_rows, chunk_size) for chunk in result)
+
+        reconstructed = np.hstack(result)
+        assert np.array_equal(
+            reconstructed[:, :n_cols], training_data_requiring_padding.encoded_array
+        )
+        padding_width = reconstructed.shape[1] - n_cols
+        assert np.array_equal(
+            reconstructed[:, n_cols:], np.zeros((n_rows, padding_width))
+        )
 
 
 class TestCompressionModel_initialisation:
@@ -394,11 +449,10 @@ class TestCompressionModel_initialisation:
 
 
 class TestCompressionModel_layer_sizes_and_data_incompatibility:
-    # TODO: or maybe just warn if we accept to add/remove columns of training data
     def test_raise_at_initialisation(self, basic_training_data: TrainingDataFixture):
-        with pytest.raises(
-            ValueError,
-            match="must be a divisor of n_cols",
+        with pytest.warns(
+            UserWarning,
+            match="is not a divisor of n_cols",
         ):
             CompressionModel(
                 training_encoded_geno_array=basic_training_data.encoded_array,
@@ -413,9 +467,9 @@ class TestCompressionModel_layer_sizes_and_data_incompatibility:
         default_compression_model.training_encoded_geno_array = (
             basic_training_data.encoded_array
         )
-        with pytest.raises(
-            ValueError,
-            # match="",
+        with pytest.warns(
+            UserWarning,
+            match="is not a divisor of n_cols",
         ):
             default_compression_model.layer_sizes = [7, 3, 1]
 
@@ -425,8 +479,8 @@ class TestCompressionModel_layer_sizes_and_data_incompatibility:
         default_compression_model: CompressionModel,
     ):
         default_compression_model.layer_sizes = [7, 3, 1]
-        with pytest.raises(
-            ValueError,
+        with pytest.warns(
+            UserWarning,
             # match="",
         ):
             default_compression_model.training_encoded_geno_array = (
