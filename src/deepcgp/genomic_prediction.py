@@ -1,8 +1,4 @@
-# ==============================
-# Tanzila Islam
-# Email: tanzilamohita@gmail.com
-# Date: 5/27/2024
-# ===============================
+"""TODO."""
 
 from tensorflow.keras import regularizers
 from tensorflow.keras.layers import (
@@ -19,6 +15,7 @@ from tensorflow.keras.optimizers import Adam
 
 
 def create_model(input_shape):
+    """TODO."""
     # there are 13 layers defined in this model  except input layer
     model = Sequential()
     model.add(

@@ -68,6 +68,7 @@ extend-select = [
   "ARG", # flake8-unused-arguments https://docs.astral.sh/ruff/rules/#flake8-unused-arguments-arg
   "ERA", # commented code https://docs.astral.sh/ruff/rules/#eradicate-era
   "B",   # flake8-bugbear https://docs.astral.sh/ruff/rules/#flake8-bugbear-b
+  "RUF", # Ruff-specific https://docs.astral.sh/ruff/rules/#refurb-furb
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -75,6 +76,7 @@ extend-select = [
   "D", # it is ok to not always have documentation for (small) tests
   "S101", # use of assert
   "N",   # to make test class name more permisive
+  "SLF", # to test private member
 ]
 
 [tool.pyright]

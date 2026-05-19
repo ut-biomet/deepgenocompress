@@ -1,3 +1,22 @@
+"""Utilities for autoencoder-based compression of genotype data.
+
+Provides :class:`CompressionModel`, which splits encoded genotype arrays
+into fixed-size chunks and trains one autoencoder per chunk. The learned
+encoders can then compress new data into a lower-dimensional representation.
+
+Classes
+-------
+AutoencoderModels
+    Builds a symmetric autoencoder and its corresponding encoder from a list of
+    layer sizes. (Also available as ``deepcgp.AutoencoderModels``)
+
+CompressionModel
+    Orchestrates data chunking, autoencoder construction, training, and
+    compression. Splits the genotype data into chunks matching the first
+    layer size, and fits one :class:`AutoencoderModels` instance per chunk.
+    (Also available as ``deepcgp.CompressionModel``)
+"""
+
 import logging
 import random
 import warnings
@@ -129,7 +148,7 @@ class AutoencoderModels:
 
         encoder_layers = input_layer
         for i, (layer_size, act_fun) in enumerate(
-            zip(encoding_sizes, encoding_activations)
+            zip(encoding_sizes, encoding_activations, strict=True)
         ):
             encoder_layers = Dense(
                 layer_size, activation=act_fun, name=f"encoding_{i}"
@@ -140,7 +159,7 @@ class AutoencoderModels:
 
         decoder_layers = encoder_layers
         for i, (layer_size, act_fun) in enumerate(
-            zip(decoding_sizes, decoding_activations)
+            zip(decoding_sizes, decoding_activations, strict=True)
         ):
             decoder_layers = Dense(
                 layer_size, activation=act_fun, name=f"decoding_{i}"
@@ -284,7 +303,18 @@ class CompressionModel:
 
     @property
     def chunk_size(self):
-        """"""
+        """Number of columns in each data chunk.
+
+        Corresponds to ``layer_sizes[0]``, which is the input dimension of each
+        autoencoder. The training data is split into chunks of this size before
+        fitting or compression. Returns ``0`` if ``layer_sizes`` is not set.
+
+        See Also
+        --------
+        :attr:`CompressionModel.layer_sizes` : Autoencoder layer dimensions.
+        :attr:`CompressionModel.n_chunks` : Number of chunks the data is split into.
+
+        """
         return self.layer_sizes[0] if self.layer_sizes else 0
 
     batch_size: int
@@ -470,6 +500,36 @@ class CompressionModel:
         encoded_geno_array: NDArray[np.float32],
         batch_size: int | None = None,
     ) -> NDArray[np.float32]:
+        """Compress genotype data using the fitted autoencoders.
+
+        Splits the input array into chunks matching the training chunk size,
+        runs each chunk through its corresponding encoder, and returns the
+        horizontally stacked compressed representations.
+
+        Parameters
+        ----------
+        encoded_geno_array : NDArray[np.float32]
+            Encoded genotype array to compress. Must have the same number of
+            columns as the training data.
+        batch_size : int, optional
+            Batch size for encoder prediction. Defaults to ``self.batch_size``
+            if not provided.
+
+        Returns
+        -------
+        NDArray[np.float32]
+            Compressed array of shape ``(n_samples, n_chunks * latent_dim)``,
+            where ``latent_dim`` is ``self.layer_sizes[-1]``.
+
+        Raises
+        ------
+        RuntimeError
+            If the model has not been fitted yet (i.e. ``self.is_fitted`` is ``False``).
+        ValueError
+            If ``encoded_geno_array`` has a different number of columns than
+            the training data.
+
+        """
         if not self.is_fitted:
             raise RuntimeError("Model is not fitted.")
         self._check_compatibility_with_training_data(encoded_geno_array)

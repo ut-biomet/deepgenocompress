@@ -79,7 +79,9 @@ class TestAutoencoderModels:
         self, basic_autoencoder_models
     ):
         aem = basic_autoencoder_models
-        for enc_layer, ae_layer in zip(aem.encoder.layers, aem.autoencoder.layers):
+        for enc_layer, ae_layer in zip(
+            aem.encoder.layers, aem.autoencoder.layers, strict=True
+        ):
             assert enc_layer is ae_layer
 
     def test_use_sigmoid_for_latent_layer(self, basic_autoencoder_models):
@@ -481,7 +483,7 @@ class TestCompressionModel_layer_sizes_and_data_incompatibility:
         default_compression_model.layer_sizes = [7, 3, 1]
         with pytest.warns(
             UserWarning,
-            # match="",
+            match="is not a divisor of n_cols",
         ):
             default_compression_model.training_encoded_geno_array = (
                 basic_training_data.encoded_array
@@ -494,7 +496,7 @@ class TestCompressionModel_fit:
     ):
         with pytest.raises(
             RuntimeError,
-            match="No training data available.",
+            match=r"No training data available\.",
         ):
             default_compression_model.fit()
 
@@ -504,7 +506,7 @@ class TestCompressionModel_fit:
         default_compression_model.layer_sizes = [8, 4, 2]
         with pytest.raises(
             RuntimeError,
-            match="No training data available.",
+            match=r"No training data available\.",
         ):
             default_compression_model.fit()
 
@@ -518,7 +520,7 @@ class TestCompressionModel_fit:
         )
         with pytest.raises(
             RuntimeError,
-            match="layer_sizes is not set.",
+            match=r"layer_sizes is not set\.",
         ):
             default_compression_model.fit()
 
@@ -751,7 +753,7 @@ class TestCompressionModel_compress:
     ):
         with pytest.raises(
             RuntimeError,
-            match="Model is not fitted.",
+            match=r"Model is not fitted\.",
         ):
             default_compression_model.compress(basic_training_data.encoded_array)
 
@@ -761,7 +763,7 @@ class TestCompressionModel_compress:
     ):
         with pytest.raises(
             ValueError,
-            match="^Provided data have a different number of columns ",
+            match=r"^Provided data have a different number of columns ",
         ):
             fitted_compression_model.compress(np.array([[1, 0, 0, 1, 0, 0]]))
 
@@ -786,3 +788,10 @@ class TestCompressionModel_compress:
     ):
         result = fitted_compression_model.compress(basic_training_data.encoded_array)
         assert result.dtype == np.float32
+
+
+def test_public_api_exports():
+    import deepcgp
+
+    assert hasattr(deepcgp, "CompressionModel")
+    assert hasattr(deepcgp, "AutoencoderModels")
