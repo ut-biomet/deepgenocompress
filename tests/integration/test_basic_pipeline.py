@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import pytest
 
 from deepcgp import CompressionModel, encode_snp_array
 
