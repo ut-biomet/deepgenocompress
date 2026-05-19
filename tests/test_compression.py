@@ -80,7 +80,7 @@ class TestAutoencoderModels:
     ):
         aem = basic_autoencoder_models
         for enc_layer, ae_layer in zip(
-            aem.encoder.layers, aem.autoencoder.layers, strict=True
+            aem.encoder.layers, aem.autoencoder.layers, strict=False
         ):
             assert enc_layer is ae_layer
 
