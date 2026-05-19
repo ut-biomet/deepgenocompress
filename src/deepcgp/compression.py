@@ -209,9 +209,6 @@ def _split_data(
     chunk_size: int,
     encoding_size=None,
 ):
-    # TODO: trouble if n_cols is prime (could happen - low probability - if
-    # data have a prime number of markers)
-    # no chunk_size will be able to split the data.
 
     n_cols: int = encoded_geno_array.shape[1]
 
