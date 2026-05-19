@@ -556,17 +556,28 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "black" },
+    { name = "ipykernel" },
+    { name = "isort" },
+    { name = "jupyter" },
+    { name = "jupytext" },
+    { name = "pytest" },
+    { name = "pytest-mock" },
+    { name = "ruff" },
+    { name = "types-tensorflow" },
+]
+dev-no-exec = [
     { name = "ipykernel" },
     { name = "jupyter" },
     { name = "jupytext" },
     { name = "pytest" },
     { name = "pytest-mock" },
+    { name = "types-tensorflow" },
 ]
 lint-lsp-formatter = [
     { name = "black" },
     { name = "isort" },
     { name = "ruff" },
-    { name = "types-tensorflow" },
 ]
 test = [
     { name = "pytest" },
@@ -584,17 +595,28 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "black", specifier = ">=26.3.1" },
+    { name = "ipykernel", specifier = ">=7.2.0" },
+    { name = "isort", specifier = ">=8.0.1" },
+    { name = "jupyter", specifier = ">=1.1.1" },
+    { name = "jupytext", specifier = ">=1.19.1" },
+    { name = "pytest", specifier = ">=9.0.2" },
+    { name = "pytest-mock", specifier = ">=3.15.1" },
+    { name = "ruff", specifier = ">=0.14.6" },
+    { name = "types-tensorflow", specifier = ">=2.18.0.20260402" },
+]
+dev-no-exec = [
     { name = "ipykernel", specifier = ">=7.2.0" },
     { name = "jupyter", specifier = ">=1.1.1" },
     { name = "jupytext", specifier = ">=1.19.1" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "pytest-mock", specifier = ">=3.15.1" },
+    { name = "types-tensorflow", specifier = ">=2.18.0.20260402" },
 ]
 lint-lsp-formatter = [
     { name = "black", specifier = ">=26.3.1" },
     { name = "isort", specifier = ">=8.0.1" },
     { name = "ruff", specifier = ">=0.14.6" },
-    { name = "types-tensorflow", specifier = ">=2.18.0.20260402" },
 ]
 test = [
     { name = "pytest", specifier = ">=9.0.2" },

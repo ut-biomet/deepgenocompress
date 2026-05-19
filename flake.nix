@@ -52,9 +52,6 @@
             zlib # for numpy
           ];
           venvDir = "./.venv";
-          postVenvCreation = ''
-            uv sync
-          '';
 
           postShellHook = ''
             export LD_LIBRARY_PATH="${
@@ -65,7 +62,7 @@
                 ++ buildInputs
               )
             }:$LD_LIBRARY_PATH"
-            uv sync
+            uv sync --no-dev --group dev-no-exec
           '';
         };
       }
