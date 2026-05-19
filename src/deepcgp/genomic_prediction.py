@@ -1,7 +1,7 @@
 """TODO."""
 
-from tensorflow.keras import regularizers
-from tensorflow.keras.layers import (
+from keras import regularizers
+from keras.layers import (
     BatchNormalization,
     Conv1D,
     Dense,
@@ -10,8 +10,8 @@ from tensorflow.keras.layers import (
     LeakyReLU,
     MaxPooling1D,
 )
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.optimizers import Adam
+from keras.models import Sequential
+from keras.optimizers import Adam
 
 
 def create_model(input_shape):
@@ -62,7 +62,9 @@ def create_model(input_shape):
     model.add(Dense(1))
 
     optimizer = Adam(learning_rate=0.0096039)
-    model.compile(loss="mse", optimizer=optimizer)
+    model.compile(
+        loss="mse", optimizer=optimizer  # pyright: ignore [reportArgumentType]
+    )
 
     model.summary()
     return model

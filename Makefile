@@ -17,7 +17,7 @@ format-check:
 
 python_checks:
 	git ls-files -- "*.py" | xargs ruff check
-	git ls-files -- "*.py" | xargs basedpywright
+	git ls-files -- "*.py" | xargs basedpyright
 
 tests:
 	pytest -v
