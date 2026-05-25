@@ -2,6 +2,8 @@
 
 > This repository continues the work made on https://github.com/tanzilamohita/ConvCGP by
 > @tanzilamohita.
+>
+> **Documentation: https://ut-biomet.github.io/DeepCGP/**
 
 ### Tanzila Raihan, Chyon Hae Kim, Hiroyuki Shimono, Akio Kimura, Hiroyoshi Iwata\*
 
