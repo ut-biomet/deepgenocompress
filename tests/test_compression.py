@@ -145,6 +145,34 @@ class TestAutoencoderModels:
     def test_is_fitted_is_false(self):
         assert not AutoencoderModels([4, 3, 2]).is_fitted
 
+    def test_raise_warning_if_latent_size_equal_input_size(self):
+        with pytest.warns(
+            UserWarning,
+            match=r"is equal or larger than",
+        ) as warn_info:
+            AutoencoderModels([4, 3, 4])
+
+        expected_message = (
+            "Latent layer size (4) is equal or larger than "
+            "the input layer size (4). This will expand rather "
+            "than compress the data."
+        )
+        assert str(warn_info[0].message) == expected_message
+
+    def test_raise_warning_if_latent_size_larger_than_input_size(self):
+        with pytest.warns(
+            UserWarning,
+            match=r"is equal or larger than",
+        ) as warn_info:
+            AutoencoderModels([5, 7, 8])
+
+        expected_message = (
+            "Latent layer size (8) is equal or larger than "
+            "the input layer size (5). This will expand rather "
+            "than compress the data."
+        )
+        assert str(warn_info[0].message) == expected_message
+
 
 @dataclass
 class TrainingDataFixture:

@@ -69,6 +69,14 @@ def _check_layer_sizes(layer_sizes):
                 "layer_sizes must be a list, or tuple of int got "
                 f"`{type(layer_sizes[i])}` for index layers_sizes[{i}]."
             )
+    if layer_sizes[-1] >= layer_sizes[0]:
+        warnings.warn(
+            f"Latent layer size ({layer_sizes[-1]}) is equal or larger than "
+            f"the input layer size ({layer_sizes[0]}). This will expand rather "
+            "than compress the data.",
+            UserWarning,
+            stacklevel=2,
+        )
 
 
 class AutoencoderModels:
