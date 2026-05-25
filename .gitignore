@@ -11,3 +11,6 @@ wheels/
 
 # envrc
 .direnv
+
+# documentation
+docs/_build/

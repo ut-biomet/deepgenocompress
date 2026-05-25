@@ -1,0 +1,11 @@
+/* To force properties to occupy their own line */
+/* see https://github.com/readthedocs/sphinx_rtd_theme/issues/1247 */
+dl.py.property {
+  display: block !important;
+}
+
+.cell_output.docutils.container img {
+  /* images created by jupyter-sphinx */
+  /* width: 300px; */
+  max-width: 50%;
+}

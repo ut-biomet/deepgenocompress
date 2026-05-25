@@ -42,6 +42,9 @@ doc = [
     "ipykernel>=7.2.0",
     "jupyter>=1.1.1",
     "jupytext>=1.19.1",
+    "jupyter-sphinx>=0.5.3",
+    "sphinx-book-theme>=1.2.0",
+    "sphinx-autodoc-typehints>=3.6.1",
 ]
 
 
