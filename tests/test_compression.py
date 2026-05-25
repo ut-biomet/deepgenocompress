@@ -236,24 +236,23 @@ def fitted_compression_model(basic_training_data: TrainingDataFixture):
 
 
 class Test_check_layer_sizes_and_data_compatibility:
-    # TODO: or maybe just warn if we accept to add/remove columns of training data
 
     # valid cases
     def test_returns_true_for_valid_n_cols_first_layer(self):
-        assert _check_layer_sizes_and_data_compatibility(100, 10) is True
+        assert _check_layer_sizes_and_data_compatibility(100, 10) is None
 
     def test_n_cols_equals_first_layer_size(self):
-        assert _check_layer_sizes_and_data_compatibility(8, 8) is True
+        assert _check_layer_sizes_and_data_compatibility(8, 8) is None
 
     def test_returns_true_for_valid_encoding_size_first_layer(self):
-        assert _check_layer_sizes_and_data_compatibility(100, 10, 5) is True
+        assert _check_layer_sizes_and_data_compatibility(100, 10, 5) is None
 
     def test_returns_true_encoding_size_equals_first_layer(self):
         with pytest.warns(
             UserWarning,
             match=r"layer_sizes\[0\]=8 is equal to `encoding_size`.",
         ) as warn_info:
-            assert _check_layer_sizes_and_data_compatibility(64, 8, 8) is True
+            assert _check_layer_sizes_and_data_compatibility(64, 8, 8) is None
 
         expected_message = (
             "layer_sizes[0]=8 is equal to `encoding_size` "
@@ -791,7 +790,7 @@ class TestCompressionModel_compress:
     ):
         with pytest.raises(
             ValueError,
-            match=r"^Provided data have a different number of columns ",
+            match=r"^Incompatible data. Provided data have a different number of columns ",
         ):
             fitted_compression_model.compress(np.array([[1, 0, 0, 1, 0, 0]]))
 
