@@ -1,6 +1,6 @@
 {
   description = "Flake for a python environment (deps managed without nix)";
-  inputs.nixpkgs.url = "nixpkgs/nixos-25.11";
+  inputs.nixpkgs.url = "nixpkgs/nixos-26.05";
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
   nixConfig = {
