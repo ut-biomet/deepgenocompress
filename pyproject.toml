@@ -1,7 +1,7 @@
 [project]
 name = "deepcgp"
 version = "0.1.0"
-description = "A Convolutional Neural Network to Predict Genotypic Values of Rice Traits from Compressed Genome-Wide Polymorphisms"
+description = "A Convolutional Neural Network to Predict Genotypic Values from Compressed Genome-Wide Polymorphisms"
 readme = "README.md"
 authors = [
     { name = "Tanzila Islam", email = "tanzilamohita@gmail.com" }
