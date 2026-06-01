@@ -31,9 +31,9 @@ def build_one_hot_encoding_map(
 
     Parameters
     ----------
-    geno_array : ArrayLike
+    geno_array :
         2D array of genotype data
-    exclude : Container, optional
+    exclude :
         Any object supporting the ``in`` operator (e.g. set, list, tuple).
         Collection of values to exclude from the one-hot encoding map.
         Typically the values of ``geno_array`` representing missing or ambiguous
@@ -43,7 +43,6 @@ def build_one_hot_encoding_map(
 
     Returns
     -------
-    dict[list[int]]
         A dictionary mapping each unique allele to its one-hot encoded vector.
         The vectors are of length n, where n is the number of unique alleles.
 
@@ -73,7 +72,7 @@ def _validate_encoding_map(
 ) -> None:
     """Ensure the encoding map is valid.
 
-    Return None if valid raise if not.
+    Raises an exception if invalid.
     """
     if not isinstance(encoding_map, dict):
         # pyright: ignore [reportUnreachable]
@@ -115,15 +114,15 @@ def encode_snp_array(
 
     Parameters
     ----------
-    geno_array : NDArray[np.str_]
+    geno_array :
         2D array of genotype data where each element is a string representing
         an allele (e.g. "A", "C", "G", "T").
-    missing_values : Container, optional
+    missing_values :
         Any object supporting the ``in`` operator (e.g. set, list, tuple).
         Collection of value of geno_array representing missing genotype calls
         that should not be assigned a default one hot encoding vector.
         They will be encoded as a zero vector. Defaults to ``{"N"}``.
-    encoding_map : Mapping[Any, list[int] | list[float]] | None, optional
+    encoding_map :
         A dictionary mapping each allele to its encoding vector.
         If None, a one-hot encoding map is built automatically from the unique
         alleles found in ``geno_array`` using :func:`build_one_hot_encoding_map`
@@ -131,7 +130,6 @@ def encode_snp_array(
 
     Returns
     -------
-    NDArray[np.float32]
         2D array of shape (n_samples, n_alleles * encoding_length) where each
         row is the flattened encoding of the corresponding input row.
 
@@ -151,18 +149,19 @@ def encode_snp_array(
     .. jupyter-execute::
 
         from deepcgp import encode_snp_array
+        import numpy as np
+
         geno_array = np.array([["A", "C"], ["G", "T"]])
         encode_snp_array(geno_array)
 
     .. jupyter-execute::
 
-        from deepcgp import encode_snp_array
         geno_array = np.array([["A", "C"], ["G", "T"]])
         custom_map = {
-            "A": [0.9, 0.1],
-            "C": [0.1, 0.9],
-            "G": [0.5, 0.5],
-            "T": [0.2, 0.8]
+            "A": [0, 0],
+            "C": [0, 1],
+            "G": [1, 0],
+            "T": [1, 1]
         }
         encode_snp_array(geno_array, encoding_map=custom_map)
 

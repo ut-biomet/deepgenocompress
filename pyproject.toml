@@ -1,7 +1,7 @@
 [project]
 name = "deepcgp"
 version = "0.1.0"
-description = "A Convolutional Neural Network to Predict Genotypic Values of Rice Traits from Compressed Genome-Wide Polymorphisms"
+description = "A Convolutional Neural Network to Predict Genotypic Values from Compressed Genome-Wide Polymorphisms"
 readme = "README.md"
 authors = [
     { name = "Tanzila Islam", email = "tanzilamohita@gmail.com" }
@@ -23,10 +23,8 @@ dev = [
 dev-no-exec = [
   # group without executable (eg. ruff): NixOS cannot run dynamically linked executables
   {include-group = "test"},
+  {include-group = "doc"},
   "types-tensorflow>=2.18.0.20260402",
-  "ipykernel>=7.2.0",
-  "jupyter>=1.1.1",
-  "jupytext>=1.19.1",
 ]
 
 test = [
@@ -38,6 +36,17 @@ lint_lsp_formatter = [
     "black>=26.3.1",
     "isort>=8.0.1",
     "ruff>=0.14.6",
+]
+doc = [
+    "sphinx>=9.0.4",
+    "ipykernel>=7.2.0",
+    "jupyter>=1.1.1",
+    "jupytext>=1.19.1",
+    "jupyter-sphinx>=0.5.3",
+    "sphinx-book-theme>=1.2.0",
+    "sphinx-autodoc-typehints>=3.6.1",
+    "quarto>=0.1.0",
+    "myst-parser>=5.1.0",
 ]
 
 
@@ -84,6 +93,10 @@ extend-select = [
   "S101", # use of assert
   "N",   # to make test class name more permisive
   "SLF", # to test private member
+]
+
+"docs/**" = [
+  "ERA",
 ]
 
 [tool.pyright]

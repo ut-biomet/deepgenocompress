@@ -2,6 +2,8 @@
 
 > This repository continues the work made on https://github.com/tanzilamohita/ConvCGP by
 > @tanzilamohita.
+>
+> **Documentation: https://ut-biomet.github.io/DeepCGP/**
 
 ### Tanzila Raihan, Chyon Hae Kim, Hiroyuki Shimono, Akio Kimura, Hiroyoshi Iwata\*
 
@@ -14,6 +16,8 @@ the compressed data can be applied to predict genotypic values using CNN. To ass
 performance of ConvCGP, we employed three genome datasets: C7AIR, with 7,098
 single-nucleotide polymorphisms (SNPs); HDRA, with 700,000 SNPs; and Maize GSTP004, with
 approximately 11.7 million SNPs.
+
+cf. [biorxiv preprint](https://www.biorxiv.org/content/10.1101/2024.11.20.624609v1.full)
 
 Availability of Rice Datasets: You can access the dataset from
 [here](http://www.ricediversity.org/data/index.cfm).
@@ -64,6 +68,7 @@ The makes commands will probbly fail on a Windows environment (maybe try with Gi
 | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
 | Run tests                                                                                                                               | `make tests`             |
 | Lint and type-check the code (using [`ruff`](https://docs.astral.sh/ruff/) and [`basedpyright`](https://docs.basedpyright.com/latest/)) | `make python_checks`     |
+| Build the documentation                                                                                                                 | `make doc`               |
 | Format the code (also clean notebooks outputs)                                                                                          | `make format`            |
 | Execute notebooks and export to html                                                                                                    | `make notebooks_html`    |
 | Add a new dependency                                                                                                                    | `uv add <package>`       |

@@ -1,0 +1,189 @@
+---
+title: Usage Example
+jupyter: python3
+---
+
+This page presents a simple usage of `deepcgp` package.
+
+## Imports and basic script initialisation
+
+### Logging
+
+`deepcgp` can log information for some calculation. To enable the logging we
+have to setup using `logging`.
+
+```{python}
+import logging
+logging.basicConfig(level=logging.INFO)
+logging.getLogger("deepcgp").setLevel(logging.INFO)
+```
+
+Also to make the outputs of this example less noisy we will disable some
+`tensorflow` related logs with:
+
+```{python}
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+```
+
+
+### Used libraries
+
+For this example, `pandas` (dependency of `deepcgp`) is used for importing the
+data and `pprint` for prettier display of data structures.
+
+```{python}
+from pprint import pprint
+
+import pandas as pd
+import deepcgp
+```
+
+
+
+## Example data
+
+For this example we will use a **small** data set from a csv file storing SNP
+markers as strings: `A`, `C`, `T`, `G` with one sample per homozygous sample and
+one marker per column.
+
+```{python}
+# TODO: better path maybe add those example data in the package.
+data = pd.read_csv(f"../../tests/fixtures/X.csv", index_col=0)
+print(data)
+```
+
+These raw data have `{python} data.shape[0]` lines and **`{python} data.shape[1]` columns**.
+
+## Data compression
+
+### Conversion to "One hot encoding"
+
+Before being able to use these data through neural networks, we need to encode
+these alleles as numerical values. For that, an encoding map is needed.
+Users can provide their custom encoding map or use the `build_one_hot_encoding_map`
+function to automatically generate one from the data.
+
+```{python}
+data_array = data.astype(str).values
+encoding_map = deepcgp.build_one_hot_encoding_map(geno_array = data_array)
+```
+
+The encoding map is a dictionary is:
+
+```{python}
+pprint(encoding_map)
+```
+
+With this encoding map, allele "`{python} list(encoding_map.keys())[0]`" will be encoded as
+"`{python} list(encoding_map.values())[0]`" and allele "`{python} list(encoding_map.keys())[-1]`"
+as "`{python} list(encoding_map.values())[-1]`".
+
+
+Now that we have the encoding map, we can encode the data using the `encode_snp_array` function.
+
+```{python}
+encoded_data = deepcgp.encode_snp_array(
+  geno_array = data_array,
+  encoding_map = encoding_map,
+)
+pprint(encoded_data)
+```
+
+The encoded data now have `{python} encoded_data.shape[0]` lines,
+**`{python} encoded_data.shape[1]` columns**.
+
+### Create the compression model
+
+Now that we have the encoded data ready to be used by neural networks, we can set up the
+"compression model". `deepcgp` provides the `CompressionModel` class for that.
+
+
+Here we initialise the compression model by specifying:
+
+- the training data are `encoded_data`
+- the autoencoders layer sizes: `[14, 7, 3]` 14 neurons as input, 7 for
+  intermediate layer and 3 for the latent layer.
+- a seed for reproducibility of the training/test sets splitting during the fitting of the models
+- a batch size of `52`, learning rate of `0.001` and `200` epochs for the models fitting
+
+
+```{python}
+cm = deepcgp.CompressionModel(
+    training_encoded_geno_array=encoded_data,
+    layer_sizes=[14, 7, 3],
+    seed=42,
+    batch_size=52,
+    learning_rate=0.001,
+    epochs=200,
+)
+```
+
+```{python}
+#| echo: false
+n_c = encoded_data.shape[1]
+n_l = cm.layer_sizes[0]
+r = n_c/n_l
+if r != cm.n_chunks:
+    raise Exception("For this example better to use input layer size as a divider of the data size.")
+```
+
+
+The `CompressionModel` employs a modular architecture that partitions large genomic
+datasets into manageable "chunks". This strategy is essential for genomic
+prediction because it allows the model to scale to millions of markers while
+maintaining a reasonable memory footprint. Each chunk is processed by an
+independent autoencoder, ensuring that the compression is both efficient and
+computationally scalable.
+
+With those settings, the training data will be split in `{python} cm.n_chunks`
+chunks which will train `{python} cm.n_chunks` autoencoders to compress the data.
+Indeed, the encoded training data have `{python} n_c` columns, we specify the
+autoencoders to have an input size of `{python} n_l` which make
+`{python} f"{n_c} / {n_l} = {r}"` chunks.
+
+```{python}
+print(cm.n_chunks)
+```
+
+### Fit the autoencoders
+
+The compression model is initialised but not yet fitted. This is done with
+the `fit` method.
+
+```{python}
+cm.fit()
+```
+
+### Compress the initial data
+
+Now that we have our trained compression model, we can use it to compress genomic
+data with the `compress` method.
+
+During this step, the input data is partitioned into chunks, in the same way as
+the training data, and each chunk is passed through the trained encoders to extract
+the compressed, latent representation.
+
+```{python}
+compressed_array = cm.compress(encoded_geno_array=encoded_data)
+```
+
+The compressed data have `{python} compressed_array.shape[0]` lines,
+**`{python} compressed_array.shape[1]` columns**.
+
+### Summary
+
+
+```{python}
+#| echo: false
+size_reduction =  1 - compressed_array.shape[1]/encoded_data.shape[1]
+```
+
+- Shape of the raw data (encoded as strings): `{python} data.shape[0]` lines,
+  `{python} data.shape[1]` columns.
+- Shape of the encoded data: `{python} encoded_data.shape[0]` lines,
+  **`{python} encoded_data.shape[1]` columns**.
+- Shape of the compressed data: `{python} compressed_array.shape[0]` lines,
+  **`{python} compressed_array.shape[1]` columns**.
+
+Size reduction is `{python} f"{size_reduction:.1%}"`

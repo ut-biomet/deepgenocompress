@@ -233,6 +233,11 @@ class TestBuildOneHotEncodingMap:
             "T": [0, 0, 0, 1],
         }
 
+    def test_empty_array(self):
+        empty_array = np.empty((0, 0))
+        result = build_one_hot_encoding_map(empty_array)
+        assert result == {}
+
 
 class TestEncodeSnpArray:
     """Tests for encode_snp_array functions"""

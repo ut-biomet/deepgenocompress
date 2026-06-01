@@ -25,3 +25,7 @@ tests:
 notebooks_html:
 	git ls-files -- "*.ipynb" | xargs jupyter nbconvert --to notebook --execute --inplace
 	git ls-files -- "*.ipynb" | xargs jupyter nbconvert --to html
+
+doc:
+	make -C docs clean_quarto_pages && make -C docs quarto_pages
+	make -C docs clean && make -C docs html
