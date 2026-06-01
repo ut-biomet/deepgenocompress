@@ -95,5 +95,9 @@ extend-select = [
   "SLF", # to test private member
 ]
 
+"docs/**" = [
+  "ERA",
+]
+
 [tool.pyright]
 "typeCheckingMode" = "basic"

@@ -449,6 +449,7 @@ class CompressionModel:
             is derived from.
         :attr:`CompressionModel.chunk_size` : The chunk size validated against
             this value.
+
         """
         if self.encoding_map is None:
             return None
@@ -704,6 +705,7 @@ class CompressionModel:
         --------
         :attr:`CompressionModel.chunk_size` : Derived from ``layer_sizes[0]``.
         :class:`AutoencoderModels` : Consumes ``layer_sizes`` to build each autoencoder.
+
         """
         return self._layer_sizes
 

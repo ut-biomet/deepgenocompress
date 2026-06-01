@@ -790,7 +790,9 @@ class TestCompressionModel_compress:
     ):
         with pytest.raises(
             ValueError,
-            match=r"^Incompatible data. Provided data have a different number of columns ",
+            match=(
+                r"^Incompatible data. Provided data have a different number of columns "
+            ),
         ):
             fitted_compression_model.compress(np.array([[1, 0, 0, 1, 0, 0]]))
 
