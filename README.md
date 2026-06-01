@@ -17,6 +17,8 @@ performance of ConvCGP, we employed three genome datasets: C7AIR, with 7,098
 single-nucleotide polymorphisms (SNPs); HDRA, with 700,000 SNPs; and Maize GSTP004, with
 approximately 11.7 million SNPs.
 
+cf. [biorxiv preprint](https://www.biorxiv.org/content/10.1101/2024.11.20.624609v1.full)
+
 Availability of Rice Datasets: You can access the dataset from
 [here](http://www.ricediversity.org/data/index.cfm).
 
