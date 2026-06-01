@@ -1,9 +1,21 @@
 import re
+from dataclasses import dataclass
+from unittest.mock import call
 
+import numpy as np
 import pytest
 from keras import Model
+from keras.callbacks import EarlyStopping, History
+from pytest_mock import MockerFixture
+from sklearn.model_selection import train_test_split
 
-from deepcgp.compression import AutoencoderModels, compress_data
+from deepcgp.compression import (
+    AutoencoderModels,
+    CompressionModel,
+    _check_layer_sizes_and_data_compatibility,
+    _split_data,
+)
+from deepcgp.data_processing import build_one_hot_encoding_map, encode_snp_array
 
 LAYER_SIZES_CASES = [
     pytest.param([32, 16, 8, 4], id="2-encoding-layers"),
@@ -23,7 +35,7 @@ def basic_autoencoder_models(layer_sizes):
 
 
 class TestAutoencoderModels:
-    """Tests for `AutoencoderModels` function"""
+    """Tests for `AutoencoderModels` class"""
 
     def test_both_are_keras_models(self, basic_autoencoder_models):
         assert isinstance(basic_autoencoder_models.autoencoder, Model)
@@ -60,20 +72,16 @@ class TestAutoencoderModels:
         assert len(basic_autoencoder_models.autoencoder.layers) == expected
 
     def test_layer_count_encoder(self, basic_autoencoder_models, layer_sizes):
-        expected = sum(
-            [
-                1,  # input layer
-                len(layer_sizes) - 2,  # ie. - input layer - latent layer
-                1,  # latent layer
-            ]
-        )
+        expected = len(layer_sizes)
         assert len(basic_autoencoder_models.encoder.layers) == expected
 
     def test_encoder_share_same_first_layers_of_autoencoder(
         self, basic_autoencoder_models
     ):
         aem = basic_autoencoder_models
-        for enc_layer, ae_layer in zip(aem.encoder.layers, aem.autoencoder.layers):
+        for enc_layer, ae_layer in zip(
+            aem.encoder.layers, aem.autoencoder.layers, strict=False
+        ):
             assert enc_layer is ae_layer
 
     def test_use_sigmoid_for_latent_layer(self, basic_autoencoder_models):
@@ -93,10 +101,10 @@ class TestAutoencoderModels:
         assert output_layer.activation.__name__ == "sigmoid"
 
     def test_latent_layer_with_size_one(self):
-        layers_sizes = [20, 16, 8, 1]
-        aem = AutoencoderModels(layers_sizes)
+        layer_sizes = [20, 16, 8, 1]
+        aem = AutoencoderModels(layer_sizes)
         assert aem.encoder.output_shape == (None, 1)
-        assert aem.autoencoder.output_shape == (None, layers_sizes[0])
+        assert aem.autoencoder.output_shape == (None, layer_sizes[0])
 
     def test_input_dim_one(self):
         aem = AutoencoderModels([1, 16, 8, 4])
@@ -108,18 +116,18 @@ class TestAutoencoderModels:
         assert aem.encoder.output_shape == (None, 10)
         assert aem.autoencoder.output_shape == (None, 10)
 
-    def test_raise_if_layers_sizes_is_string(self):
+    def test_raise_if_layer_sizes_is_string(self):
         with pytest.raises(
             TypeError,
-            match="layers_sizes must be a list, or tuple of int got `<class 'str'>`",
+            match="layer_sizes must be a list, or tuple of int got `<class 'str'>`",
         ):
             AutoencoderModels("987")  # pyright: ignore [reportArgumentType]
 
-    def test_raise_if_layers_sizes_lenght_is_lower_than_2(self):
+    def test_raise_if_layer_sizes_lenght_is_lower_than_2(self):
         with pytest.raises(
             ValueError,
             match=re.escape(
-                "layers_sizes length must be greater than 2, got `len(layers_sizes)=1`"
+                "layer_sizes length must be greater than 2, got `len(layer_sizes)=1`"
             ),
         ):
             AutoencoderModels([42])
@@ -128,8 +136,690 @@ class TestAutoencoderModels:
         with pytest.raises(
             ValueError,
             match=re.escape(
-                "layers_sizes must be a list, or tuple of int got `<class 'float'>` "
+                "layer_sizes must be a list, or tuple of int got `<class 'float'>` "
                 "for index layers_sizes[1]."
             ),
         ):
             AutoencoderModels([42, 3.5])  # pyright: ignore [reportArgumentType]
+
+    def test_is_fitted_is_false(self):
+        assert not AutoencoderModels([4, 3, 2]).is_fitted
+
+    def test_raise_warning_if_latent_size_equal_input_size(self):
+        with pytest.warns(
+            UserWarning,
+            match=r"is equal or larger than",
+        ) as warn_info:
+            AutoencoderModels([4, 3, 4])
+
+        expected_message = (
+            "Latent layer size (4) is equal or larger than "
+            "the input layer size (4). This will expand rather "
+            "than compress the data."
+        )
+        assert str(warn_info[0].message) == expected_message
+
+    def test_raise_warning_if_latent_size_larger_than_input_size(self):
+        with pytest.warns(
+            UserWarning,
+            match=r"is equal or larger than",
+        ) as warn_info:
+            AutoencoderModels([5, 7, 8])
+
+        expected_message = (
+            "Latent layer size (8) is equal or larger than "
+            "the input layer size (5). This will expand rather "
+            "than compress the data."
+        )
+        assert str(warn_info[0].message) == expected_message
+
+
+@dataclass
+class TrainingDataFixture:
+    array: np.ndarray
+    encoded_array: np.ndarray
+    encoding_map: dict
+    layer_sizes: list
+
+
+@pytest.fixture(scope="module")
+def basic_training_data():
+    ga = np.array(
+        [
+            ["G", "A", "T", "T", "A", "C"],
+            ["A", "C", "A", "T", "T", "A"],
+            ["T", "A", "G", "G", "T", "C"],
+        ]
+    )
+
+    encoding_map = build_one_hot_encoding_map(ga)
+    return TrainingDataFixture(
+        array=ga,
+        encoded_array=encode_snp_array(ga),
+        encoding_map=encoding_map,
+        layer_sizes=[8, 4, 2],
+    )
+
+
+@pytest.fixture(scope="module")
+def training_data_requiring_padding():
+    ga = np.array(
+        [
+            ["G", "A", "T", "T", "A", "C"],
+            ["A", "C", "A", "T", "T", "A"],
+            ["T", "A", "G", "G", "T", "C"],
+        ]
+    )
+
+    encoding_map = build_one_hot_encoding_map(ga)
+    return TrainingDataFixture(
+        array=ga,
+        encoded_array=encode_snp_array(ga),
+        encoding_map=encoding_map,
+        layer_sizes=[16, 8, 2],  # 16 = 4 alleles * encoding_size (=4)
+    )
+
+
+@pytest.fixture
+def default_compression_model():
+    return CompressionModel()
+
+
+@pytest.fixture(scope="module")
+def fitted_compression_model(basic_training_data: TrainingDataFixture):
+    model = CompressionModel(
+        training_encoded_geno_array=basic_training_data.encoded_array,
+        layer_sizes=basic_training_data.layer_sizes,
+    )
+    model.fit()
+    return model
+
+
+class Test_check_layer_sizes_and_data_compatibility:
+    # TODO: or maybe just warn if we accept to add/remove columns of training data
+
+    # valid cases
+    def test_returns_true_for_valid_n_cols_first_layer(self):
+        assert _check_layer_sizes_and_data_compatibility(100, 10) is True
+
+    def test_n_cols_equals_first_layer_size(self):
+        assert _check_layer_sizes_and_data_compatibility(8, 8) is True
+
+    def test_returns_true_for_valid_encoding_size_first_layer(self):
+        assert _check_layer_sizes_and_data_compatibility(100, 10, 5) is True
+
+    def test_returns_true_encoding_size_equals_first_layer(self):
+        with pytest.warns(
+            UserWarning,
+            match=r"layer_sizes\[0\]=8 is equal to `encoding_size`.",
+        ) as warn_info:
+            assert _check_layer_sizes_and_data_compatibility(64, 8, 8) is True
+
+        expected_message = (
+            "layer_sizes[0]=8 is equal to `encoding_size` "
+            "(ie. each chunk will consist of only 1 encoded allele)."
+        )
+        assert str(warn_info[0].message) == expected_message
+
+    # n_cols / first_layer_size related test error
+    def test_warn_when_n_cols_is_not_divisible_by_first_layer_size(self):
+        with pytest.warns(UserWarning, match="is not a divisor of n_cols"):
+            _check_layer_sizes_and_data_compatibility(10, 3)
+
+    def test_warn_when_n_cols_is_lower_than_first_layer_size(self):
+        with pytest.warns(UserWarning, match="is not a divisor of n_cols"):
+            _check_layer_sizes_and_data_compatibility(5, 10)
+
+    def test_warning_message_for_n_cols_first_layer_related_error(self):
+        with pytest.warns(UserWarning, match="is not a divisor of n_cols") as warn_info:
+            _check_layer_sizes_and_data_compatibility(13, 7)
+
+        expected_message = (
+            "layer_sizes[0]=7 is not a divisor of n_cols=13. "
+            "Column padding (filled with 0) will be added to the end of the data "
+            "to fit requested layer_sizes[0]"
+        )
+        assert str(warn_info[0].message) == expected_message
+
+    # encoding_size / first_layer_size related error
+    def test_warns_when_encoding_size_not_multiple_of_n_cols(self):
+        with pytest.warns(UserWarning, match="is not a multiple of"):
+            _check_layer_sizes_and_data_compatibility(100, 10, 3)
+
+    def test_warns_when_encoding_size_larger_than_first_layer(self):
+        with pytest.warns(UserWarning, match="is not a multiple of"):
+            _check_layer_sizes_and_data_compatibility(100, 10, 20)
+
+    def test_warning_message_for_encoding_size_first_layer_related_error(self):
+        with pytest.warns(UserWarning, match=r"is not a multiple of") as warn_info:
+            _check_layer_sizes_and_data_compatibility(100, 10, 7)
+
+        expected_message = (
+            "layer_sizes[0]=10 is not a multiple of encoding_size=7. "
+            "(ie. each chunk will cut through encoded alleles, "
+            "leaving incomplete encodings at chunk edges)"
+        )
+        assert str(warn_info[0].message) == expected_message
+
+
+class Test_split_data:
+
+    def test_return_list(self, basic_training_data: TrainingDataFixture):
+        chunk_size = basic_training_data.layer_sizes[0]
+        result = _split_data(basic_training_data.encoded_array, chunk_size)
+        assert isinstance(result, list)
+
+    def test_correct_number_of_chunks(self, basic_training_data: TrainingDataFixture):
+        chunk_size = basic_training_data.layer_sizes[0]
+        result = _split_data(basic_training_data.encoded_array, chunk_size)
+
+        n_cols = basic_training_data.encoded_array.shape[1]
+        assert len(result) == n_cols / chunk_size
+
+    def test_correct_n_rows_in_chunks(self, basic_training_data: TrainingDataFixture):
+        chunk_size = basic_training_data.layer_sizes[0]
+        result = _split_data(basic_training_data.encoded_array, chunk_size)
+
+        n_rows = basic_training_data.encoded_array.shape[0]
+        assert all(chunk.shape[0] == n_rows for chunk in result)
+
+    def test_correct_n_cols_in_chunks(self, basic_training_data: TrainingDataFixture):
+        chunk_size = basic_training_data.layer_sizes[0]
+        result = _split_data(basic_training_data.encoded_array, chunk_size)
+        assert all(chunk.shape[1] == chunk_size for chunk in result)
+
+    def test_can_reconstruct_original_from_chunks(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        chunk_size = basic_training_data.layer_sizes[0]
+        result = _split_data(basic_training_data.encoded_array, chunk_size)
+
+        reconstructed = np.hstack(result)
+        assert np.array_equal(reconstructed, basic_training_data.encoded_array)
+
+    def test_dtype_preserved(self, basic_training_data: TrainingDataFixture):
+        chunk_size = basic_training_data.layer_sizes[0]
+        result = _split_data(basic_training_data.encoded_array, chunk_size)
+        assert all(
+            chunk.dtype == basic_training_data.encoded_array.dtype for chunk in result
+        )
+
+    def test_single_chunks(self, basic_training_data: TrainingDataFixture):
+        # ie. chunk_size is equal to the number of columns
+        n_cols = basic_training_data.encoded_array.shape[1]
+        result = _split_data(basic_training_data.encoded_array, n_cols)
+
+        assert isinstance(result, list)
+        assert len(result) == 1
+
+    def test_with_single_row(self):
+        arr = np.array([[1, 0, 0, 1, 0, 0]])
+        result = _split_data(arr, chunk_size=2)
+        assert len(result) == 3
+        assert all(chunk.shape == (1, 2) for chunk in result)
+
+    def test_chunk_size_one(self, basic_training_data: TrainingDataFixture):
+        result = _split_data(basic_training_data.encoded_array, 1)
+
+        n_cols = basic_training_data.encoded_array.shape[1]
+        assert len(result) == n_cols
+
+        n_rows = basic_training_data.encoded_array.shape[0]
+        assert all(chunk.shape == (n_rows, 1) for chunk in result)
+
+    def test_add_padding_for_incompatible_sizes(
+        self, training_data_requiring_padding: TrainingDataFixture
+    ):
+        n_cols = training_data_requiring_padding.encoded_array.shape[1]
+        chunk_size = training_data_requiring_padding.layer_sizes[0]
+
+        with pytest.warns(UserWarning):
+            result = _split_data(
+                training_data_requiring_padding.encoded_array,
+                training_data_requiring_padding.layer_sizes[0],
+            )
+
+        assert len(result) == (n_cols // chunk_size) + 1
+
+        n_rows = training_data_requiring_padding.encoded_array.shape[0]
+        assert all(chunk.shape == (n_rows, chunk_size) for chunk in result)
+
+        reconstructed = np.hstack(result)
+        assert np.array_equal(
+            reconstructed[:, :n_cols], training_data_requiring_padding.encoded_array
+        )
+        padding_width = reconstructed.shape[1] - n_cols
+        assert np.array_equal(
+            reconstructed[:, n_cols:], np.zeros((n_rows, padding_width))
+        )
+
+
+class TestCompressionModel_initialisation:
+    def test_default_parameters(self, default_compression_model):
+        assert default_compression_model.training_encoded_geno_array is None
+        assert default_compression_model.encoding_map is None
+        assert default_compression_model.batch_size == 50
+        assert default_compression_model.epochs == 200
+        assert default_compression_model.learning_rate == 0.001
+        assert default_compression_model.loss == "mse"
+        assert default_compression_model.seed is None
+        assert default_compression_model.training_size == 0.4
+        assert default_compression_model.validation_size == 0.5
+        assert default_compression_model.layer_sizes == []
+
+        assert isinstance(default_compression_model.fitting_callbacks, list)
+        assert len(default_compression_model.fitting_callbacks) == 1
+        assert isinstance(default_compression_model.fitting_callbacks[0], EarlyStopping)
+
+    def test_default_initial_state(self, default_compression_model):
+        assert default_compression_model.is_fitted is False
+        assert default_compression_model.autoencoder_models == []
+        assert default_compression_model.autoencoder_fits == []
+        assert default_compression_model.autoencoder_evaluations == []
+        assert default_compression_model.encoding_size is None
+        assert default_compression_model.n_chunks == 0
+        assert default_compression_model.chunk_size == 0
+
+    def test_custom_parameters(self, basic_training_data: TrainingDataFixture):
+        model = CompressionModel(
+            training_encoded_geno_array=basic_training_data.encoded_array,
+            encoding_map=basic_training_data.encoding_map,
+            layer_sizes=basic_training_data.layer_sizes,
+            batch_size=100,
+            epochs=500,
+            fitting_callbacks=[],
+            learning_rate=0.01,
+            loss="mae",
+            seed=42,
+            training_size=0.8,
+            validation_size=0.2,
+        )
+        assert model.training_encoded_geno_array is not None
+        assert np.array_equal(
+            model.training_encoded_geno_array, basic_training_data.encoded_array
+        )
+        assert model.encoding_map == basic_training_data.encoding_map
+        assert model.layer_sizes == basic_training_data.layer_sizes
+        assert model.batch_size == 100
+        assert model.epochs == 500
+        assert model.fitting_callbacks == []
+        assert model.learning_rate == 0.01
+        assert model.loss == "mae"
+        assert model.seed == 42
+        assert model.training_size == 0.8
+        assert model.validation_size == 0.2
+
+        assert model.is_fitted is False
+        assert model.autoencoder_models == []
+        assert model.autoencoder_fits == []
+        assert model.autoencoder_evaluations == []
+        assert model.encoding_size is len(
+            next(iter(basic_training_data.encoding_map.values()))
+        )
+        assert model.n_chunks == 3
+        assert model.chunk_size == 8
+
+    def test_accept_tuple_layer_sizes_and_stored_as_list(self):
+        model = CompressionModel(layer_sizes=(28, 14, 7))
+        assert isinstance(model.layer_sizes, list)
+        assert model.layer_sizes == [28, 14, 7]
+
+    @pytest.mark.parametrize(
+        "bad_layer_sizes",
+        [[28], [], ()],
+        ids=[
+            "layer_sizes length 1",
+            "layer_sizes list length 0",
+            "layer_sizes tuple length 0",
+        ],
+    )
+    def test_raises_with_invalid_layer_sizes(self, bad_layer_sizes):
+        with pytest.raises(ValueError):
+            CompressionModel(layer_sizes=bad_layer_sizes)
+
+
+class TestCompressionModel_layer_sizes_and_data_incompatibility:
+    def test_raise_at_initialisation(self, basic_training_data: TrainingDataFixture):
+        with pytest.warns(
+            UserWarning,
+            match="is not a divisor of n_cols",
+        ):
+            CompressionModel(
+                training_encoded_geno_array=basic_training_data.encoded_array,
+                layer_sizes=[7, 3, 1],
+            )
+
+    def test_raise_when_layer_sizes_is_set_after_initialisation(
+        self,
+        basic_training_data: TrainingDataFixture,
+        default_compression_model: CompressionModel,
+    ):
+        default_compression_model.training_encoded_geno_array = (
+            basic_training_data.encoded_array
+        )
+        with pytest.warns(
+            UserWarning,
+            match="is not a divisor of n_cols",
+        ):
+            default_compression_model.layer_sizes = [7, 3, 1]
+
+    def test_raise_when_training_data_is_set_after_initialisation(
+        self,
+        basic_training_data: TrainingDataFixture,
+        default_compression_model: CompressionModel,
+    ):
+        default_compression_model.layer_sizes = [7, 3, 1]
+        with pytest.warns(
+            UserWarning,
+            match="is not a divisor of n_cols",
+        ):
+            default_compression_model.training_encoded_geno_array = (
+                basic_training_data.encoded_array
+            )
+
+
+class TestCompressionModel_fit:
+    def test_raise_with_no_training_data_and_no_layer_sizes(
+        self, default_compression_model: CompressionModel
+    ):
+        with pytest.raises(
+            RuntimeError,
+            match=r"No training data available\.",
+        ):
+            default_compression_model.fit()
+
+    def test_raise_with_no_training_data(
+        self, default_compression_model: CompressionModel
+    ):
+        default_compression_model.layer_sizes = [8, 4, 2]
+        with pytest.raises(
+            RuntimeError,
+            match=r"No training data available\.",
+        ):
+            default_compression_model.fit()
+
+    def test_raise_with_no_layer_sizes(
+        self,
+        default_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+    ):
+        default_compression_model.training_encoded_geno_array = (
+            basic_training_data.encoded_array
+        )
+        with pytest.raises(
+            RuntimeError,
+            match=r"layer_sizes is not set\.",
+        ):
+            default_compression_model.fit()
+
+    def test_is_fitted_becomes_true(self, fitted_compression_model: CompressionModel):
+        assert fitted_compression_model.is_fitted
+
+    def test_autoencoders_models_are_set(
+        self, fitted_compression_model: CompressionModel
+    ):
+        assert (
+            len(fitted_compression_model.autoencoder_models)
+            == fitted_compression_model.n_chunks
+        )
+        for aem in fitted_compression_model.autoencoder_models:
+            assert isinstance(aem, AutoencoderModels)
+        assert all(aem.is_fitted for aem in fitted_compression_model.autoencoder_models)
+
+    def test_autoencoder_fits_are_set(self, fitted_compression_model: CompressionModel):
+        assert (
+            len(fitted_compression_model.autoencoder_fits)
+            == fitted_compression_model.n_chunks
+        )
+        for fit in fitted_compression_model.autoencoder_fits:
+            assert isinstance(fit, History)
+
+    def test_autoencoder_evaluations_are_set(
+        self, fitted_compression_model: CompressionModel
+    ):
+        assert (
+            len(fitted_compression_model.autoencoder_evaluations)
+            == fitted_compression_model.n_chunks
+        )
+        for evaluation in fitted_compression_model.autoencoder_evaluations:
+            assert isinstance(evaluation, dict)
+            assert list(evaluation.keys()) == [fitted_compression_model.loss]
+
+    def test_autoencoders_related_lists_do_not_accumulate(
+        self, fitted_compression_model: CompressionModel
+    ):
+        fitted_compression_model.fit()
+
+        assert (
+            len(fitted_compression_model.autoencoder_models)
+            == fitted_compression_model.n_chunks
+        )
+
+        assert (
+            len(fitted_compression_model.autoencoder_fits)
+            == fitted_compression_model.n_chunks
+        )
+
+        assert (
+            len(fitted_compression_model.autoencoder_evaluations)
+            == fitted_compression_model.n_chunks
+        )
+
+    def test_AutoencoderModels_is_correctly_called(
+        self, basic_training_data: TrainingDataFixture, mocker: MockerFixture
+    ):
+        def fake_aem(layer_sizes):
+            aem = mocker.MagicMock()
+            aem.mocked_layer_sizes = layer_sizes
+            return aem
+
+        mock_aem_class = mocker.patch(
+            "deepcgp.compression.AutoencoderModels", side_effect=fake_aem
+        )
+
+        model = CompressionModel(
+            training_encoded_geno_array=basic_training_data.encoded_array,
+            layer_sizes=basic_training_data.layer_sizes,
+        )
+        model.fit()
+
+        assert mock_aem_class.call_count == model.n_chunks
+        for c in mock_aem_class.call_args_list:
+            assert c == call(basic_training_data.layer_sizes)
+
+        for m in model.autoencoder_models:
+            assert (
+                m.mocked_layer_sizes  # pyright: ignore [reportAttributeAccessIssue]
+                == basic_training_data.layer_sizes
+            )
+
+    def test_generate_and_store_seed_if_none(self, basic_training_data):
+        model = CompressionModel(
+            training_encoded_geno_array=basic_training_data.encoded_array,
+            layer_sizes=basic_training_data.layer_sizes,
+        )
+        assert model.seed is None
+        model.fit()
+        assert model.seed is not None
+
+    def test_split_test_train_uses_same_seed_for_each_autoencoder(
+        self, basic_training_data, mocker: MockerFixture
+    ):
+        # ideally we should test that the same rows index are used for
+        # each autoencoder: eg.
+        # x_train is always rows "2, 4, 6, 7" for each chunk
+        # but this is difficult to test so here we check train_test_split is called
+        # with the same seed for each chunk
+        # it could break with new implementation
+        model = CompressionModel(
+            training_encoded_geno_array=basic_training_data.encoded_array,
+            layer_sizes=basic_training_data.layer_sizes,
+        )
+
+        mock_test_train_split = mocker.patch(
+            "deepcgp.compression.train_test_split", wraps=train_test_split
+        )
+        model.fit()
+        calls = mock_test_train_split.call_args_list
+        if len(calls) != 2 * model.n_chunks:
+            # be sure the model.fit() calls train_test_split twice,
+            # one for autoencoder's fit x_train / x_validate
+            # and once for evaluation
+            pytest.skip("train_test_split doesn't seems to have been called twice")
+        first_split_seeds = [c.kwargs["random_state"] for c in calls[::2]]
+        second_split_seeds = [c.kwargs["random_state"] for c in calls[1::2]]
+
+        assert len(set(first_split_seeds)) == 1
+        assert len(set(second_split_seeds)) == 1
+
+    def test_split_test_train_uses_provided_seed(
+        self, basic_training_data, mocker: MockerFixture
+    ):
+        rng_seed = 1111
+        model = CompressionModel(
+            training_encoded_geno_array=basic_training_data.encoded_array,
+            layer_sizes=basic_training_data.layer_sizes,
+            seed=rng_seed,
+        )
+
+        mock_test_train_split = mocker.patch(
+            "deepcgp.compression.train_test_split", wraps=train_test_split
+        )
+        model.fit()
+        calls = mock_test_train_split.call_args_list
+        if len(calls) != 2 * model.n_chunks:
+            # be sure the model.fit() calls train_test_split twice,
+            # one for autoencoder's fit x_train / x_validate
+            # and once for evaluation
+            pytest.skip("train_test_split doesn't seems to have been called twice")
+        first_split_seeds = [c.kwargs["random_state"] for c in calls[::2]]
+        second_split_seeds = [c.kwargs["random_state"] for c in calls[1::2]]
+
+        assert first_split_seeds[0] == rng_seed
+        assert second_split_seeds[0] == rng_seed
+
+    def test_split_test_train_uses_provided_seed_edge_case_with_seed_0(
+        self, basic_training_data, mocker: MockerFixture
+    ):
+        rng_seed = 0
+        model = CompressionModel(
+            training_encoded_geno_array=basic_training_data.encoded_array,
+            layer_sizes=basic_training_data.layer_sizes,
+            seed=rng_seed,
+        )
+
+        mock_test_train_split = mocker.patch(
+            "deepcgp.compression.train_test_split", wraps=train_test_split
+        )
+        model.fit()
+        calls = mock_test_train_split.call_args_list
+        if len(calls) != 2 * model.n_chunks:
+            # be sure the model.fit() calls train_test_split twice,
+            # one for autoencoder's fit x_train / x_validate
+            # and once for evaluation
+            pytest.skip("train_test_split doesn't seems to have been called twice")
+        first_split_seeds = [c.kwargs["random_state"] for c in calls[::2]]
+        second_split_seeds = [c.kwargs["random_state"] for c in calls[1::2]]
+
+        assert first_split_seeds[0] == rng_seed
+        assert second_split_seeds[0] == rng_seed
+
+    def test_passed_seed_take_precedence(
+        self, basic_training_data, mocker: MockerFixture
+    ):
+        rng_seed = 1111
+        model = CompressionModel(
+            training_encoded_geno_array=basic_training_data.encoded_array,
+            layer_sizes=basic_training_data.layer_sizes,
+            seed=2222,
+        )
+
+        mock_test_train_split = mocker.patch(
+            "deepcgp.compression.train_test_split", wraps=train_test_split
+        )
+        model.fit(seed=rng_seed)
+        calls = mock_test_train_split.call_args_list
+        if len(calls) != 2 * model.n_chunks:
+            # be sure the model.fit() calls train_test_split twice,
+            # one for autoencoder's fit x_train / x_validate
+            # and once for evaluation
+            pytest.skip("train_test_split doesn't seems to have been called twice")
+        first_split_seeds = [c.kwargs["random_state"] for c in calls[::2]]
+        second_split_seeds = [c.kwargs["random_state"] for c in calls[1::2]]
+
+        assert first_split_seeds[0] == rng_seed
+        assert second_split_seeds[0] == rng_seed
+
+    def test_model_seed_is_updated(self, basic_training_data):
+        model = CompressionModel(
+            training_encoded_geno_array=basic_training_data.encoded_array,
+            layer_sizes=basic_training_data.layer_sizes,
+            seed=1,
+        )
+        model.fit(seed=42)
+        assert model.seed == 42
+
+    def test_with_validation_size_set_to_float_1(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        # ie. No evaluation set
+        model = CompressionModel(
+            training_encoded_geno_array=basic_training_data.encoded_array,
+            layer_sizes=basic_training_data.layer_sizes,
+            validation_size=1.0,
+        )
+        model.fit()
+        assert len(model.autoencoder_evaluations) == model.n_chunks
+        assert all(evaluation is None for evaluation in model.autoencoder_evaluations)
+
+
+class TestCompressionModel_compress:
+    def test_raise_when_model_is_not_fitted(
+        self,
+        default_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+    ):
+        with pytest.raises(
+            RuntimeError,
+            match=r"Model is not fitted\.",
+        ):
+            default_compression_model.compress(basic_training_data.encoded_array)
+
+    def test_raise_when_n_cols_do_not_match_training_data(
+        self,
+        fitted_compression_model: CompressionModel,
+    ):
+        with pytest.raises(
+            ValueError,
+            match=r"^Provided data have a different number of columns ",
+        ):
+            fitted_compression_model.compress(np.array([[1, 0, 0, 1, 0, 0]]))
+
+    def test_output_shape(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+    ):
+        result = fitted_compression_model.compress(basic_training_data.encoded_array)
+        expected_n_cols = (
+            fitted_compression_model.layer_sizes[-1] * fitted_compression_model.n_chunks
+        )
+        assert result.shape == (
+            basic_training_data.encoded_array.shape[0],
+            expected_n_cols,
+        )
+
+    def test_output_dtype(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+    ):
+        result = fitted_compression_model.compress(basic_training_data.encoded_array)
+        assert result.dtype == np.float32
+
+
+def test_public_api_exports():
+    import deepcgp
+
+    assert hasattr(deepcgp, "CompressionModel")
+    assert hasattr(deepcgp, "AutoencoderModels")

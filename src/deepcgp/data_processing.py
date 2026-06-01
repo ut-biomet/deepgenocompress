@@ -1,3 +1,17 @@
+"""Utilities for encoding genotype arrays into numerical matrices.
+
+Provides functions to build one-hot encoding maps from allele data and
+encode SNP arrays into float32 matrices suitable for use with Keras models.
+
+Functions
+---------
+build_one_hot_encoding_map(geno_array, exclude={"N"})
+    Build a one-hot encoding map based on alleles found in the genotype array.
+
+encode_snp_array(geno_array, missing_values={"N"}, encoding_map=None)
+    Encode a genotype array into a numerical matrix.
+"""
+
 from collections.abc import Container, Mapping
 from numbers import Real
 from typing import Any
@@ -22,7 +36,7 @@ def build_one_hot_encoding_map(
     exclude : Container, optional
         Any object supporting the ``in`` operator (e.g. set, list, tuple).
         Collection of values to exclude from the one-hot encoding map.
-        These typically the values of geno_array representing missing or ambiguous
+        Typically the values of ``geno_array`` representing missing or ambiguous
         genotype calls that should not be assigned an encoding vector.
         Defaults to ``{"N"}``.
 
@@ -65,7 +79,7 @@ def _validate_encoding_map(
         # pyright: ignore [reportUnreachable]
         raise TypeError(f"`encoding_map` must be a dict, got {type(encoding_map)}")
 
-    expected_length = len(list(encoding_map.values())[0])
+    expected_length = len(next(iter(encoding_map.values())))
 
     for allele, encoding in encoding_map.items():
         if not isinstance(encoding, list) or not all(
@@ -79,7 +93,7 @@ def _validate_encoding_map(
             raise ValueError(
                 f"All encodings must have the same length, got {len(encoding)} "
                 f"for '{allele}' but {expected_length}"
-                f"for '{list(encoding_map.keys())[0]}'"
+                f"for '{next(iter(encoding_map.keys()))}'"
             )
         if allele in missing_values and sum(encoding) != 0:
             raise ValueError(
@@ -144,7 +158,12 @@ def encode_snp_array(
 
         from deepcgp import encode_snp_array
         geno_array = np.array([["A", "C"], ["G", "T"]])
-        custom_map = {"A": [0.9, 0.1], "C": [0.1, 0.9], "G": [0.5, 0.5], "T": [0.2, 0.8]}
+        custom_map = {
+            "A": [0.9, 0.1],
+            "C": [0.1, 0.9],
+            "G": [0.5, 0.5],
+            "T": [0.2, 0.8]
+        }
         encode_snp_array(geno_array, encoding_map=custom_map)
 
     """
@@ -153,7 +172,7 @@ def encode_snp_array(
     else:
         encoding_map = build_one_hot_encoding_map(geno_array, missing_values)
 
-    encoding_length = len(list(encoding_map.values())[0])
+    encoding_length = len(next(iter(encoding_map.values())))
 
     encoded_rows = []
     for row in geno_array:
