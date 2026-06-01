@@ -29,6 +29,7 @@
           # trouble with ruff, NixOS cannot run dynamically linked executables
           # do not install them an use the nix packages instead
           UV_NO_GROUP = "lint_lsp_formatter";
+          QUARTO_PYTHON = "python"; # make quarto uses .venv's python
 
           buildInputs = with pkgs; [
             bashInteractive
@@ -46,6 +47,9 @@
             black
             ruff
             basedpyright
+
+            # doc
+            quarto
 
             # some shared libraries needed (uv/poetry etc... do not install them)
             stdenv.cc.cc.lib

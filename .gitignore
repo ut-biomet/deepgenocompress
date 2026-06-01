@@ -14,3 +14,5 @@ wheels/
 
 # documentation
 docs/_build/
+*.qmd.otter.py
+docs/quarto_pages/outputs/

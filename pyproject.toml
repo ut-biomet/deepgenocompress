@@ -45,6 +45,8 @@ doc = [
     "jupyter-sphinx>=0.5.3",
     "sphinx-book-theme>=1.2.0",
     "sphinx-autodoc-typehints>=3.6.1",
+    "quarto>=0.1.0",
+    "myst-parser>=5.1.0",
 ]
 
 

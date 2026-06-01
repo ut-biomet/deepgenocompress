@@ -7,11 +7,16 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 import os
+import sys
 from importlib.metadata import version as pkg_version
 
 # required by jupyter-sphinx:
 package_path = os.path.abspath("..")
 os.environ["PYTHONPATH"] = ":".join((package_path, os.environ.get("PYTHONPATH", "")))
+
+# make docs/ importable (for using custom functions if necessary)
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+
 
 project = "deepcgp"
 copyright = (
@@ -31,6 +36,8 @@ extensions = [
     "sphinx.ext.napoleon",  # enables Google/NumPy style docstrings
     "sphinx.ext.intersphinx",  # enables links to external documentation
     "jupyter_sphinx",  # embeds and executes jupyter cells in docs (for usage examples)
+    # "myst_nb",  # Integrates Jupyter Notebooks into Sphinx documentation
+    "myst_parser",  # parse .md files
 ]
 
 templates_path = ["_templates"]

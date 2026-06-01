@@ -12,4 +12,4 @@ DeepCGP
 
    installation
    api
-
+   quarto_pages/outputs/example
