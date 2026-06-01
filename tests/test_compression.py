@@ -107,12 +107,26 @@ class TestAutoencoderModels:
         assert aem.autoencoder.output_shape == (None, layer_sizes[0])
 
     def test_input_dim_one(self):
-        aem = AutoencoderModels([1, 16, 8, 4])
+        with pytest.warns(
+            UserWarning,
+            match=(
+                r"Latent layer size \(\d+\) is equal or "
+                r"larger than the input layer size \(1\)"
+            ),
+        ):
+            aem = AutoencoderModels([1, 16, 8, 4])
         assert aem.autoencoder.input_shape == (None, 1)
         assert aem.autoencoder.output_shape == (None, 1)
 
     def test_no_compression(self):
-        aem = AutoencoderModels([10, 10, 10, 10])
+        with pytest.warns(
+            UserWarning,
+            match=(
+                r"Latent layer size \(\d+\) is equal or "
+                r"larger than the input layer size \(\d+\)"
+            ),
+        ):
+            aem = AutoencoderModels([10, 10, 10, 10])
         assert aem.encoder.output_shape == (None, 10)
         assert aem.autoencoder.output_shape == (None, 10)
 
@@ -169,6 +183,40 @@ class TestAutoencoderModels:
         expected_message = (
             "Latent layer size (8) is equal or larger than "
             "the input layer size (5). This will expand rather "
+            "than compress the data."
+        )
+        assert str(warn_info[0].message) == expected_message
+
+    def test_warning_when_enlarging_data(self):
+        with pytest.warns(
+            UserWarning,
+            match=(
+                r"Latent layer size \(\d+\) is equal or "
+                r"larger than the input layer size \(\d+\)"
+            ),
+        ) as warn_info:
+            AutoencoderModels([1, 5, 3])
+
+        expected_message = (
+            "Latent layer size (3) is equal or larger than "
+            "the input layer size (1). This will expand rather "
+            "than compress the data."
+        )
+        assert str(warn_info[0].message) == expected_message
+
+    def test_warning_when_data_size_remains_the_same(self):
+        with pytest.warns(
+            UserWarning,
+            match=(
+                r"Latent layer size \(\d+\) is equal or "
+                r"larger than the input layer size \(\d+\)"
+            ),
+        ) as warn_info:
+            AutoencoderModels([7, 3, 7])
+
+        expected_message = (
+            "Latent layer size (7) is equal or larger than "
+            "the input layer size (7). This will expand rather "
             "than compress the data."
         )
         assert str(warn_info[0].message) == expected_message
