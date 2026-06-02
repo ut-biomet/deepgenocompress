@@ -10,6 +10,7 @@ from tensorflow.keras import regularizers
 from tensorflow.keras.optimizers import Adam
 
 
+#
 def create_model(input_shape):
     # there are 13 layers defined in this model  except input layer
     model = Sequential()
