@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from unittest.mock import call
 
 import numpy as np
+import pandas as pd
 import pytest
 from keras import Model
 from keras.callbacks import EarlyStopping, History
@@ -225,6 +226,7 @@ class TestAutoencoderModels:
 @dataclass
 class TrainingDataFixture:
     array: np.ndarray
+    dataframe: pd.DataFrame
     encoded_array: np.ndarray
     encoding_map: dict
     layer_sizes: list
@@ -232,17 +234,21 @@ class TrainingDataFixture:
 
 @pytest.fixture(scope="module")
 def basic_training_data():
-    ga = np.array(
+    gd = pd.DataFrame(
         [
             ["G", "A", "T", "T", "A", "C"],
             ["A", "C", "A", "T", "T", "A"],
             ["T", "A", "G", "G", "T", "C"],
-        ]
+        ],
+        index=["ind_1", "ind_2", "ind_3"],
+        columns=["snp_1", "snp_2", "snp_3", "snp_4", "snp_5", "snp_6"],
     )
+    ga = gd.to_numpy()
 
     encoding_map = build_one_hot_encoding_map(ga)
     return TrainingDataFixture(
         array=ga,
+        dataframe=gd,
         encoded_array=encode_snp_array(ga),
         encoding_map=encoding_map,
         layer_sizes=[8, 4, 2],
@@ -251,17 +257,21 @@ def basic_training_data():
 
 @pytest.fixture(scope="module")
 def training_data_requiring_padding():
-    ga = np.array(
+    gd = pd.DataFrame(
         [
             ["G", "A", "T", "T", "A", "C"],
             ["A", "C", "A", "T", "T", "A"],
             ["T", "A", "G", "G", "T", "C"],
-        ]
+        ],
+        index=["ind_1", "ind_2", "ind_3"],
+        columns=["snp_1", "snp_2", "snp_3", "snp_4", "snp_5", "snp_6"],
     )
+    ga = gd.to_numpy()
 
     encoding_map = build_one_hot_encoding_map(ga)
     return TrainingDataFixture(
         array=ga,
+        dataframe=gd,
         encoded_array=encode_snp_array(ga),
         encoding_map=encoding_map,
         layer_sizes=[16, 8, 2],  # 16 = 4 alleles * encoding_size (=4)
