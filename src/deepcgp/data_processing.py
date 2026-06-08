@@ -74,9 +74,10 @@ def _validate_encoding_map(
 
     Raises an exception if invalid.
     """
-    if not isinstance(encoding_map, dict):
-        # pyright: ignore [reportUnreachable]
-        raise TypeError(f"`encoding_map` must be a dict, got {type(encoding_map)}")
+    if not isinstance(encoding_map, Mapping):
+        raise TypeError(  # pyright: ignore [reportUnreachable]
+            f"`encoding_map` must be a dict, got {type(encoding_map)}"
+        )
 
     expected_length = len(next(iter(encoding_map.values())))
 
@@ -94,7 +95,7 @@ def _validate_encoding_map(
                 f"for '{allele}' but {expected_length}"
                 f"for '{next(iter(encoding_map.keys()))}'"
             )
-        if allele in missing_values and sum(encoding) != 0:
+        if allele in missing_values and any(v != 0 for v in encoding):
             raise ValueError(
                 "Missing values not encoded with a vector of 0, "
                 f"for '{allele}' got {encoding}."

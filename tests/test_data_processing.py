@@ -130,18 +130,28 @@ class TestValidateEncodingMap:
         }
         _validate_encoding_map(encoding_map)
 
-    def test_raise_when_missing_values_not_a_0_vector(self):
+    @pytest.mark.parametrize(
+        "missing_vector",
+        [
+            ([0, 0, 1]),
+            ([-1, 0, 1]),
+        ],
+        ids=["one_hot", "sum equal to 0"],
+    )
+    def test_raise_when_missing_values_not_a_0_vector(self, missing_vector):
         encoding_map = {
             "A": [1, 0, 0],
             "B": [0, 1, 0],
-            ".": [0, 0, 1],
+            ".": missing_vector,
         }
 
+        expected_msg = (
+            "Missing values not encoded with a vector of 0, for '.' "
+            f"got {missing_vector}."
+        )
         with pytest.raises(
             ValueError,
-            match=re.escape(
-                "Missing values not encoded with a vector of 0, for '.' got [0, 0, 1]."
-            ),
+            match=re.escape(expected_msg),
         ):
             _validate_encoding_map(encoding_map, missing_values=["."])
 
