@@ -2,6 +2,7 @@ import re
 from itertools import cycle
 
 import numpy as np
+import pandas as pd
 import pytest
 from pytest_mock import MockerFixture
 
@@ -164,6 +165,14 @@ class TestValidateEncodingMap:
 
         assert _validate_encoding_map(encoding_map, missing_values=["."]) is None
 
+    def test_raise_if_encoding_map_is_empty(self):
+        encoding_map = {}
+        with pytest.raises(
+            ValueError,
+            match=re.escape("`encoding_map` is empty."),
+        ):
+            _validate_encoding_map(encoding_map)
+
 
 class TestBuildOneHotEncodingMap:
     """Tests for build_one_hot_encoding_map functions"""
@@ -247,6 +256,96 @@ class TestBuildOneHotEncodingMap:
         empty_array = np.empty((0, 0))
         result = build_one_hot_encoding_map(empty_array)
         assert result == {}
+
+    def test_with_empty_string(self):
+        geno_array = np.array(
+            [
+                ["A", "C", "T"],
+                ["G", "", "A"],
+            ]
+        )
+        result = build_one_hot_encoding_map(geno_array)
+        assert result == {
+            "": [1, 0, 0, 0, 0],
+            "A": [0, 1, 0, 0, 0],
+            "C": [0, 0, 1, 0, 0],
+            "G": [0, 0, 0, 1, 0],
+            "T": [0, 0, 0, 0, 1],
+        }
+
+    def test_numeric_array(self):
+        geno_array = np.array(
+            [
+                [2, 1, 2],
+                [0, 0, 2],
+            ]
+        )
+        result = build_one_hot_encoding_map(geno_array)
+        assert result == {
+            0: [1, 0, 0],
+            1: [0, 1, 0],
+            2: [0, 0, 1],
+        }
+
+    @pytest.mark.parametrize(
+        "miss_val",
+        [None, np.nan, pd.NA],
+        ids=["None", "np.nan", "pd.NA"],
+    )
+    def test_with_special_missing_values(self, miss_val):
+        """those are always excluded even if not specifyed in excluded."""
+        # `geno_array` must be numeric else np.nan is converted to the string "nan"
+        geno_array = np.array(
+            [
+                [2.0, 1.0, 2.0],
+                [0.0, miss_val, 2.0],
+            ]
+        )
+        result = build_one_hot_encoding_map(geno_array, exclude=[])
+        assert result == {
+            0: [1, 0, 0],
+            1: [0, 1, 0],
+            2: [0, 0, 1],
+        }
+
+    @pytest.mark.parametrize(
+        "miss_val",
+        [None, np.nan, pd.NA],
+        ids=["None", "np.nan", "pd.NA"],
+    )
+    def test_special_missing_values_can_be_given_in_exclude(self, miss_val):
+        """Even if not necessary check it doesn't crash"""
+        geno_array_str = np.array([["A", "C", "G", "T"]])
+        result_str = build_one_hot_encoding_map(geno_array_str, exclude=[miss_val])
+        assert result_str == {
+            "A": [1, 0, 0, 0],
+            "C": [0, 1, 0, 0],
+            "G": [0, 0, 1, 0],
+            "T": [0, 0, 0, 1],
+        }
+
+        geno_array_num = np.array([[0, 1, 2]])
+        result_num = build_one_hot_encoding_map(geno_array_num, exclude=[miss_val])
+        assert result_num == {
+            0: [1, 0, 0],
+            1: [0, 1, 0],
+            2: [0, 0, 1],
+        }
+
+    def test_with_mixed_types(self):
+        geno_array = np.array(
+            [
+                ["G", np.nan, 0, 0],
+                [1, None, "A", pd.NA],
+            ]
+        )
+        result = build_one_hot_encoding_map(geno_array)
+        assert result == {
+            0: [1, 0, 0, 0],
+            1: [0, 1, 0, 0],
+            "A": [0, 0, 1, 0],
+            "G": [0, 0, 0, 1],
+        }
 
 
 class TestEncodeSnpArray:
@@ -340,7 +439,14 @@ class TestEncodeSnpArray:
         np.testing.assert_array_equal(result_t, np.array([basic_encoding_map["T"]]))
 
         geno_unkown = np.array([["N"]])
-        result = encode_snp_array(geno_unkown, encoding_map=basic_encoding_map)
+        with pytest.warns(
+            UserWarning,
+            match=(
+                "The encoded array contains only zeros. This may indicate that all values "
+                "in geno_array are missing or not present in encoding_map."
+            ),
+        ):
+            result = encode_snp_array(geno_unkown, encoding_map=basic_encoding_map)
         np.testing.assert_array_equal(
             result, np.array([[0] * len(basic_encoding_map["A"])])
         )
@@ -349,7 +455,15 @@ class TestEncodeSnpArray:
         """Missing allele as empty string"""
         encoding_values_len = len(basic_encoding_map["A"])
         geno_unkown = np.array([[""]])
-        result = encode_snp_array(geno_unkown, encoding_map=basic_encoding_map)
+
+        with pytest.warns(
+            UserWarning,
+            match=(
+                "The encoded array contains only zeros. This may indicate that all values "
+                "in geno_array are missing or not present in encoding_map."
+            ),
+        ):
+            result = encode_snp_array(geno_unkown, encoding_map=basic_encoding_map)
         np.testing.assert_array_equal(result, np.array([[0] * encoding_values_len]))
 
     def test_use_correct_dtype(self, basic_geno_array, basic_encoding_map):
@@ -358,7 +472,15 @@ class TestEncodeSnpArray:
 
     def test_with_empty_array(self, basic_encoding_map):
         geno_empty = np.array([[]])
-        result = encode_snp_array(geno_empty, encoding_map=basic_encoding_map)
+
+        with pytest.warns(
+            UserWarning,
+            match=(
+                "The encoded array contains only zeros. This may indicate that all values "
+                "in geno_array are missing or not present in encoding_map."
+            ),
+        ):
+            result = encode_snp_array(geno_empty, encoding_map=basic_encoding_map)
         np.testing.assert_array_equal(result, np.array([[]]))
 
     def test_with_single_row(self, basic_encoding_map):
@@ -393,6 +515,99 @@ class TestEncodeSnpArray:
             ]
         )
         result = encode_snp_array(geno, encoding_map=basic_encoding_map)
+        np.testing.assert_array_equal(result, expected)
+
+    def test_with_numeric_geno_array(self):
+        geno = np.array(
+            [
+                [0, 1, 2],
+                [1, 2, -1],
+            ]
+        )
+        em = build_one_hot_encoding_map(geno, exclude={-1})
+        result = encode_snp_array(geno, missing_values={-1})
+        expected = np.array(
+            [
+                em[0] + em[1] + em[2],
+                em[1] + em[2] + [0] * 3,
+            ]
+        )
+        np.testing.assert_array_equal(result, expected)
+
+    def test_with_nan(self):
+        geno = np.array(
+            [
+                [0, 1, 2],
+                [1, np.nan, 1],
+            ]
+        )
+        em = build_one_hot_encoding_map(geno)
+        result = encode_snp_array(geno)
+        expected = np.array(
+            [
+                em[0] + em[1] + em[2],
+                em[1] + [0] * 3 + em[1],
+            ]
+        )
+        np.testing.assert_array_equal(result, expected)
+
+    def test_with_None(self):
+        geno = np.array(
+            [
+                [0, 1, 2],
+                [1, None, 1],
+            ]
+        )
+        em = build_one_hot_encoding_map(geno)
+        result = encode_snp_array(geno)
+        expected = np.array(
+            [
+                em[0] + em[1] + em[2],
+                em[1] + [0] * 3 + em[1],
+            ]
+        )
+        np.testing.assert_array_equal(result, expected)
+
+    def test_with_mixed_types(self):
+        geno = np.array(
+            [
+                ["G", np.nan, 0],
+                [1, None, "A"],
+            ]
+        )
+        em = build_one_hot_encoding_map(geno)
+        result = encode_snp_array(geno)
+        expected = np.array(
+            [
+                em["G"] + [0] * 4 + em[0],
+                em[1] + [0] * 4 + em["A"],
+            ]
+        )
+        np.testing.assert_array_equal(result, expected)
+
+    def test_warns_with_only_missing_values(self):
+        geno = np.array(
+            [
+                ["G", "A", "T"],
+                ["A", "C", "A"],
+            ]
+        )
+        encoding_map = {"Z": [1, 0], "Y": [0, 1]}
+
+        with pytest.warns(
+            UserWarning,
+            match=(
+                "The encoded array contains only zeros. This may indicate that all values "
+                "in geno_array are missing or not present in encoding_map."
+            ),
+        ):
+            result = encode_snp_array(geno, encoding_map=encoding_map)
+        expected = np.array(
+            [
+                [0] * 2 * 3,
+                [0] * 2 * 3,
+            ]
+        )
         np.testing.assert_array_equal(result, expected)
 
 
