@@ -16,7 +16,11 @@ from deepcgp.compression import (
     _check_layer_sizes_and_data_compatibility,
     _split_data,
 )
-from deepcgp.data_processing import build_one_hot_encoding_map, encode_snp_array
+from deepcgp.data_processing import (
+    _validate_encoding_map,
+    build_one_hot_encoding_map,
+    encode_snp_array,
+)
 
 LAYER_SIZES_CASES = [
     pytest.param([32, 16, 8, 4], id="2-encoding-layers"),
@@ -451,7 +455,7 @@ class Test_split_data:
         )
 
 
-class TestCompressionModel_initialisation:
+class TestCompressionModel_basic_initialisation:
     def test_default_parameters(self, default_compression_model):
         assert default_compression_model.training_encoded_geno_array is None
         assert default_compression_model.encoding_map is None
@@ -533,6 +537,254 @@ class TestCompressionModel_initialisation:
     def test_raises_with_invalid_layer_sizes(self, bad_layer_sizes):
         with pytest.raises(ValueError):
             CompressionModel(layer_sizes=bad_layer_sizes)
+
+
+class TestCompressionModel_initialisation_from_dataframe:
+    def test_can_instanciate(self, basic_training_data: TrainingDataFixture):
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe
+        )
+        assert isinstance(cm, CompressionModel)
+
+    def test_correct_encoding_with_defaults_extra_params(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe,
+        )
+
+        expected_encoded_array = encode_snp_array(
+            basic_training_data.dataframe.to_numpy()
+        )
+        assert cm.training_encoded_geno_array is not None
+        np.testing.assert_array_equal(
+            cm.training_encoded_geno_array, expected_encoded_array
+        )
+
+    def test_correct_encoding_map_with_defaults_extra_params(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe,
+        )
+
+        assert cm.encoding_map == build_one_hot_encoding_map(
+            basic_training_data.dataframe.to_numpy()
+        )
+
+    def test_correct_encoding_with_custom_encoding_map(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        encoding_map = {
+            "A": [0.0, 1.0],
+            "C": [1.0, 0.0],
+            "T": [0.0, 1.0],
+            "G": [1.0, 0.0],
+        }
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe,
+            encoding_map=encoding_map,
+        )
+
+        expected_encoded_array = encode_snp_array(
+            basic_training_data.dataframe.to_numpy(), encoding_map=encoding_map
+        )
+        assert cm.training_encoded_geno_array is not None
+        np.testing.assert_array_equal(
+            cm.training_encoded_geno_array, expected_encoded_array
+        )
+
+    def test_correct_encoding_map_with_custom_encoding_map(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        encoding_map = {
+            "A": [0.0, 1.0],
+            "C": [1.0, 0.0],
+            "T": [0.0, 1.0],
+            "G": [1.0, 0.0],
+        }
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe,
+            encoding_map=encoding_map,
+        )
+
+        assert cm.encoding_map == encoding_map
+
+    def test_correct_encoding_with_custom_missing_values(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        missing_values = ["A", "T"]
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe,
+            missing_values=missing_values,
+        )
+
+        expected_encoded_array = encode_snp_array(
+            basic_training_data.dataframe.to_numpy(),
+            missing_values=missing_values,
+        )
+        assert cm.training_encoded_geno_array is not None
+        np.testing.assert_array_equal(
+            cm.training_encoded_geno_array, expected_encoded_array
+        )
+
+    def test_correct_encoding_map_with_custom_missing_values(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        missing_values = ["A", "T"]
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe,
+            missing_values=missing_values,
+        )
+
+        assert cm.encoding_map == build_one_hot_encoding_map(
+            geno_array=basic_training_data.dataframe.to_numpy(),
+            exclude=missing_values,
+        )
+
+    def test_parameter_propagation(self, basic_training_data: TrainingDataFixture):
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe,
+            epochs=111,
+            learning_rate=0.5,
+            validation_size=0.3,
+        )
+        assert cm.epochs == 111
+        assert cm.learning_rate == 0.5
+        assert cm.validation_size == 0.3
+
+    def test_different_dtypes_handling(self):
+        geno_data = pd.DataFrame(
+            [
+                [0, 1, 2],
+                [2, -1, 1],
+                [0, np.nan, pd.NA],
+            ],
+            index=["ind_1", "ind_2", "ind_3"],
+            columns=["snp_1", "snp_2", "snp_3"],
+        )
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=geno_data, missing_values=[-1]
+        )
+
+        # correct encoding
+        expected_encoded_array = encode_snp_array(
+            geno_data.to_numpy(), missing_values=[-1]
+        )
+        assert cm.training_encoded_geno_array is not None
+        np.testing.assert_array_equal(
+            cm.training_encoded_geno_array, expected_encoded_array
+        )
+
+        # correct encoding_map
+        assert cm.encoding_map == build_one_hot_encoding_map(
+            geno_array=geno_data.to_numpy(),
+            exclude=[-1],
+        )
+
+    def test_raise_with_empty_dataframe(self):
+        geno_data = pd.DataFrame()
+
+        with pytest.raises(
+            ValueError,
+            match=re.escape(
+                "`training_dataframe` is empty. Provide a DataFrame with at least "
+                "one row and one column."
+            ),
+        ):
+            CompressionModel.from_dataframe(training_dataframe=geno_data)
+
+    def test_encoding_map_is_validated(
+        self, basic_training_data: TrainingDataFixture, mocker: MockerFixture
+    ):
+        mock_validate_encoding_map = mocker.patch(
+            "deepcgp.data_processing._validate_encoding_map",
+            wraps=_validate_encoding_map,
+        )
+
+        encoding_map = {
+            "A": [0.0, 1.0],
+            "C": [1.0, 0.0],
+            "T": [0.0, 1.0],
+            "G": [1.0, 0.0],
+        }
+        missing_values = {"Z", "Y"}
+        CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe,
+            encoding_map=encoding_map,
+            missing_values=missing_values,
+        )
+        mock_validate_encoding_map.assert_called_once_with(encoding_map, missing_values)
+
+    def test_raise_error_if_training_encoded_geno_array_is_provided(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        with pytest.raises(
+            ValueError,
+            match=re.escape(
+                "`training_encoded_geno_array` cannot be passed as a keyword argument "
+                "to from_dataframe(); it is derived from `training_dataframe`."
+            ),
+        ):
+            CompressionModel.from_dataframe(
+                training_dataframe=basic_training_data.dataframe,
+                training_encoded_geno_array=None,
+            )
+
+    def test_with_only_missing_values(self, basic_training_data: TrainingDataFixture):
+        missing_values = set(basic_training_data.dataframe.to_numpy().ravel())
+        encoding_map = {  # dummy encoding_map because it cannot be empty
+            "Z": [0.0, 1.0],
+        }
+
+        with pytest.warns(
+            UserWarning,
+            match=(
+                "The encoded array contains only zeros. This may indicate that all "
+                "values in geno_array are missing or not present in encoding_map."
+            ),
+        ):
+            cm = CompressionModel.from_dataframe(
+                training_dataframe=basic_training_data.dataframe,
+                encoding_map=encoding_map,
+                missing_values=missing_values,
+            )
+
+        # correct encoding
+        with pytest.warns(
+            UserWarning,
+            match=(
+                "The encoded array contains only zeros. This may indicate that all "
+                "values in geno_array are missing or not present in encoding_map."
+            ),
+        ):
+            expected_encoded_array = encode_snp_array(
+                basic_training_data.dataframe.to_numpy(),
+                missing_values=missing_values,
+                encoding_map=encoding_map,
+            )
+        assert cm.training_encoded_geno_array is not None
+        np.testing.assert_array_equal(
+            cm.training_encoded_geno_array, expected_encoded_array
+        )
+        assert set(np.unique(cm.training_encoded_geno_array)) == {0.0}
+
+        # correct encoding_map
+        assert cm.encoding_map == encoding_map
+
+    def test_warning_when_incompatible_layer_sizes_passed_in_kwargs(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        # Just a smoke test, full validation done is done in
+        # TestCompressionModel_layer_sizes_and_data_incompatibility
+        with pytest.warns(
+            UserWarning,
+            match="is not a divisor of n_cols",
+        ):
+            CompressionModel.from_dataframe(
+                training_dataframe=basic_training_data.dataframe,
+                layer_sizes=[7, 3, 1],
+            )
 
 
 class TestCompressionModel_layer_sizes_and_data_incompatibility:

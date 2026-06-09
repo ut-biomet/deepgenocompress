@@ -65,7 +65,7 @@ Users can provide their custom encoding map or use the `build_one_hot_encoding_m
 function to automatically generate one from the data.
 
 ```{python}
-data_array = data.astype(str).values
+data_array = data.to_numpy()
 encoding_map = deepcgp.build_one_hot_encoding_map(geno_array = data_array)
 ```
 

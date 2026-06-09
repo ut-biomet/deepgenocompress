@@ -20,9 +20,11 @@ CompressionModel
 import logging
 import random
 import warnings
+from collections.abc import Collection, Mapping
 from typing import Any
 
 import numpy as np
+import pandas as pd
 from keras import Input, Model
 from keras.callbacks import EarlyStopping
 from keras.layers import Dense
@@ -30,6 +32,12 @@ from keras.losses import Loss
 from keras.optimizers import Adam
 from numpy.typing import NDArray
 from sklearn.model_selection import train_test_split
+
+from .data_processing import (
+    _validate_encoding_map,
+    build_one_hot_encoding_map,
+    encode_snp_array,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -423,7 +431,7 @@ class CompressionModel:
             return 0
         return self.training_encoded_geno_array.shape[1]
 
-    encoding_map: dict[Any, list[float]] | None
+    encoding_map: Mapping[Any, list[float]] | None
     """Mapping from allele values to their encoding vectors.
 
     Used to determine the :attr:`encoding_size` for some internal validation.
@@ -731,7 +739,7 @@ class CompressionModel:
         self,
         # -- data --
         training_encoded_geno_array: NDArray[np.float32] | None = None,
-        encoding_map: dict[Any, list[float]] | None = None,
+        encoding_map: Mapping[Any, list[float]] | None = None,
         # -- autoencoders --
         layer_sizes: list[int] | tuple[int, ...] | None = None,
         # -- fitting --
@@ -774,6 +782,47 @@ class CompressionModel:
         )
 
         self.training_encoded_geno_array = training_encoded_geno_array
+
+    @classmethod
+    def from_dataframe(
+        cls,
+        training_dataframe: pd.DataFrame,
+        encoding_map: Mapping[Any, list[float]] | None = None,
+        missing_values: Collection = {"N"},
+        **kwargs,
+    ) -> "CompressionModel":
+        """Initialise from a training data frame.
+
+        TODO
+        """
+
+        if training_dataframe.empty:
+            raise ValueError(
+                "`training_dataframe` is empty. Provide a DataFrame with at least "
+                "one row and one column."
+            )
+        if "training_encoded_geno_array" in kwargs:
+            raise ValueError(
+                "`training_encoded_geno_array` cannot be passed as a keyword argument "
+                "to from_dataframe(); it is derived from `training_dataframe`."
+            )
+
+        geno_array = training_dataframe.to_numpy()
+
+        if encoding_map is None:
+            encoding_map = build_one_hot_encoding_map(geno_array, missing_values)
+
+        training_encoded_geno_array = encode_snp_array(
+            geno_array,
+            missing_values,
+            encoding_map,
+        )
+
+        return cls(
+            training_encoded_geno_array=training_encoded_geno_array,
+            encoding_map=encoding_map,
+            **kwargs,
+        )
 
     def fit(
         self,
