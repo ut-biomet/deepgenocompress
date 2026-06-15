@@ -1,3 +1,4 @@
+import copy
 import re
 from dataclasses import dataclass
 from unittest.mock import call
@@ -282,19 +283,38 @@ def training_data_requiring_padding():
     )
 
 
-@pytest.fixture
-def default_compression_model():
-    return CompressionModel()
+@pytest.fixture(scope="module")
+def _initialised_compression_model(basic_training_data: TrainingDataFixture):
+    return CompressionModel.from_dataframe(
+        training_dataframe=basic_training_data.dataframe,
+        layer_sizes=basic_training_data.layer_sizes,
+    )
 
 
 @pytest.fixture(scope="module")
-def fitted_compression_model(basic_training_data: TrainingDataFixture):
-    model = CompressionModel(
-        training_encoded_geno_array=basic_training_data.encoded_array,
-        layer_sizes=basic_training_data.layer_sizes,
-    )
-    model.fit()
-    return model
+def _fitted_compression_model(_initialised_compression_model: CompressionModel):
+    cm = copy.deepcopy(_initialised_compression_model)
+    cm.fit()
+    return cm
+
+
+@pytest.fixture
+def initialised_compression_model(_initialised_compression_model: CompressionModel):
+    return copy.deepcopy(_initialised_compression_model)
+
+
+@pytest.fixture
+def fitted_compression_model(_fitted_compression_model: CompressionModel):
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"__array__ implementation doesn't accept a copy keyword",
+    ):  # Keras doesn't accept NumPy 2.0's convention, to remove when problem solved.
+        return copy.deepcopy(_fitted_compression_model)
+
+
+@pytest.fixture
+def default_compression_model():
+    return CompressionModel()
 
 
 class Test_check_layer_sizes_and_data_compatibility:
@@ -456,6 +476,9 @@ class Test_split_data:
 
 
 class TestCompressionModel_basic_initialisation:
+    def test_can_instanciate(self):
+        CompressionModel()
+
     def test_default_parameters(self, default_compression_model):
         assert default_compression_model.training_encoded_geno_array is None
         assert default_compression_model.encoding_map is None
@@ -537,6 +560,19 @@ class TestCompressionModel_basic_initialisation:
     def test_raises_with_invalid_layer_sizes(self, bad_layer_sizes):
         with pytest.raises(ValueError):
             CompressionModel(layer_sizes=bad_layer_sizes)
+
+    def test_warns_with_incompatible_layer_size_and_data(
+        self,
+        basic_training_data: TrainingDataFixture,
+    ):
+        with pytest.warns(
+            UserWarning,
+            match="is not a divisor of n_cols",
+        ):
+            CompressionModel(
+                training_encoded_geno_array=basic_training_data.encoded_array,
+                layer_sizes=[7, 3, 1],
+            )
 
 
 class TestCompressionModel_initialisation_from_dataframe:
@@ -787,32 +823,27 @@ class TestCompressionModel_initialisation_from_dataframe:
             )
 
 
-class TestCompressionModel_layer_sizes_and_data_incompatibility:
-    def test_raise_at_initialisation(self, basic_training_data: TrainingDataFixture):
-        with pytest.warns(
-            UserWarning,
-            match="is not a divisor of n_cols",
-        ):
-            CompressionModel(
-                training_encoded_geno_array=basic_training_data.encoded_array,
-                layer_sizes=[7, 3, 1],
-            )
+class TestCompressionModel_layer_sizes:
+    def test_correct_value(self, default_compression_model: CompressionModel):
+        default_compression_model.layer_sizes = [7, 3, 1]
+        assert default_compression_model.layer_sizes == [7, 3, 1]
 
-    def test_raise_when_layer_sizes_is_set_after_initialisation(
+    def test_setter_warn_when_incompatible_with_encoded_data(
         self,
         basic_training_data: TrainingDataFixture,
-        default_compression_model: CompressionModel,
     ):
-        default_compression_model.training_encoded_geno_array = (
-            basic_training_data.encoded_array
+        cm = CompressionModel(
+            training_encoded_geno_array=basic_training_data.encoded_array
         )
         with pytest.warns(
             UserWarning,
             match="is not a divisor of n_cols",
         ):
-            default_compression_model.layer_sizes = [7, 3, 1]
+            cm.layer_sizes = [7, 3, 1]
 
-    def test_raise_when_training_data_is_set_after_initialisation(
+
+class TestCompressionModel_training_encoded_geno_array:
+    def test_setter_warns_when_incompatible_with_layer_size(
         self,
         basic_training_data: TrainingDataFixture,
         default_compression_model: CompressionModel,
@@ -825,6 +856,15 @@ class TestCompressionModel_layer_sizes_and_data_incompatibility:
             default_compression_model.training_encoded_geno_array = (
                 basic_training_data.encoded_array
             )
+
+
+    def test_reset(self, initialised_compression_model: CompressionModel):
+        cm = initialised_compression_model
+        cm.training_encoded_geno_array = None
+
+        assert cm.training_encoded_geno_array is None
+        assert cm.n_chunks == 0
+        assert cm._n_col_train == 0
 
 
 class TestCompressionModel_fit:
