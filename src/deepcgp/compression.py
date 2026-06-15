@@ -264,19 +264,48 @@ def _check_marker_index_size_compatibility(
         )
 
 
-def _check_layer_sizes_and_data_compatibility(
-    n_cols, first_layer_size, encoding_size=None
-):
+def _check_layer_size_and_encoded_data_size(n_cols, first_layer_size):
     """Validate compatibility between data dimensions and layer configuration.
 
-    Emits warnings for configurations that may produce unexpected behaviour,
-    such as chunk boundaries cutting across encoded alleles or requiring
-    zero-padding.
+    Emits warnings for configurations that may produce zero-padding.
 
     Parameters
     ----------
     n_cols :
         Number of columns in the encoded genotype array.
+    first_layer_size :
+        Size of the first layer (i.e. chunk size). Should ideally be a
+        divisor of ``n_cols`` and a multiple of ``encoding_size``.
+
+    Returns
+    -------
+        None
+
+    Warns
+    -----
+    UserWarning
+        If ``first_layer_size`` is not a divisor of ``n_cols`` — zero-padding
+        will be required to fit the data into equal-sized chunks.
+
+    """
+    if n_cols % first_layer_size != 0:
+        warnings.warn(
+            f"layer_sizes[0]={first_layer_size} is not a divisor of {n_cols=}. "
+            "Column padding (filled with 0) will be added to the end of the data "
+            "to fit requested layer_sizes[0]",
+            UserWarning,
+            stacklevel=2,
+        )
+
+
+def _check_layer_size_and_encoding_compatibility(first_layer_size, encoding_size):
+    """Validate compatibility between data encoding size and layer configuration.
+
+    Emits warnings for configurations where chunks will cut through encoded alleles
+    or will consist of only 1 encoded allele.
+
+    Parameters
+    ----------
     first_layer_size :
         Size of the first layer (i.e. chunk size). Should ideally be a
         divisor of ``n_cols`` and a multiple of ``encoding_size``.
@@ -291,9 +320,6 @@ def _check_layer_sizes_and_data_compatibility(
     Warns
     -----
     UserWarning
-        If ``first_layer_size`` is not a divisor of ``n_cols`` — zero-padding
-        will be required to fit the data into equal-sized chunks.
-    UserWarning
         If ``encoding_size`` is provided and ``first_layer_size`` is not a
         multiple of it — chunk boundaries will cut across encoded alleles,
         leaving incomplete encodings at chunk edges.
@@ -302,31 +328,21 @@ def _check_layer_sizes_and_data_compatibility(
         each chunk will consist of exactly one encoded allele.
 
     """
-    if n_cols % first_layer_size != 0:
+    if first_layer_size % encoding_size != 0:
         warnings.warn(
-            f"layer_sizes[0]={first_layer_size} is not a divisor of {n_cols=}. "
-            "Column padding (filled with 0) will be added to the end of the data "
-            "to fit requested layer_sizes[0]",
+            f"layer_sizes[0]={first_layer_size} is not a multiple of "
+            f"{encoding_size=}. (ie. each chunk will cut through encoded alleles, "
+            "leaving incomplete encodings at chunk edges)",
             UserWarning,
             stacklevel=2,
         )
-
-    if encoding_size is not None:
-        if first_layer_size % encoding_size != 0:
-            warnings.warn(
-                f"layer_sizes[0]={first_layer_size} is not a multiple of "
-                f"{encoding_size=}. (ie. each chunk will cut through encoded alleles, "
-                "leaving incomplete encodings at chunk edges)",
-                UserWarning,
-                stacklevel=2,
-            )
-        if encoding_size == first_layer_size:
-            warnings.warn(
-                f"layer_sizes[0]={first_layer_size} is equal to `encoding_size` "
-                "(ie. each chunk will consist of only 1 encoded allele).",
-                UserWarning,
-                stacklevel=2,
-            )
+    if encoding_size == first_layer_size:
+        warnings.warn(
+            f"layer_sizes[0]={first_layer_size} is equal to `encoding_size` "
+            "(ie. each chunk will consist of only 1 encoded allele).",
+            UserWarning,
+            stacklevel=2,
+        )
 
 
 def _split_data(
@@ -376,9 +392,11 @@ def _split_data(
 
     # TODO: may be remove the check. Could be redundant with
     # instance initialisation.
-    _check_layer_sizes_and_data_compatibility(
-        n_cols=n_cols, first_layer_size=chunk_size, encoding_size=encoding_size
-    )
+    _check_layer_size_and_encoded_data_size(n_cols=n_cols, first_layer_size=chunk_size)
+    if encoding_size is not None:
+        _check_layer_size_and_encoding_compatibility(
+            first_layer_size=chunk_size, encoding_size=encoding_size
+        )
 
     remainder = n_cols % chunk_size
     if remainder != 0:
@@ -462,7 +480,7 @@ class CompressionModel:
             return
 
         if self.layer_sizes:
-            _check_layer_sizes_and_data_compatibility(
+            _check_layer_size_and_encoded_data_size(
                 n_cols=training_encoded_geno_array.shape[1],
                 first_layer_size=self.layer_sizes[0],
             )
@@ -798,9 +816,14 @@ class CompressionModel:
     def layer_sizes(self, layers_sizes: list[int] | tuple[int, ...]):
         _check_layer_sizes(layers_sizes)
         if self.training_encoded_geno_array is not None:
-            _check_layer_sizes_and_data_compatibility(
+            _check_layer_size_and_encoded_data_size(
                 n_cols=self._n_col_train, first_layer_size=layers_sizes[0]
             )
+        if self.encoding_map is not None:
+            _check_layer_size_and_encoding_compatibility(
+                first_layer_size=layers_sizes[0], encoding_size=self.encoding_size
+            )
+
         self._layer_sizes = list(layers_sizes)
 
     @property

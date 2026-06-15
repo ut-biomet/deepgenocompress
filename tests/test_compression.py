@@ -14,7 +14,8 @@ from sklearn.model_selection import train_test_split
 from deepcgp.compression import (
     AutoencoderModels,
     CompressionModel,
-    _check_layer_sizes_and_data_compatibility,
+    _check_layer_size_and_encoded_data_size,
+    _check_layer_size_and_encoding_compatibility,
     _split_data,
 )
 from deepcgp.data_processing import (
@@ -317,43 +318,25 @@ def default_compression_model():
     return CompressionModel()
 
 
-class Test_check_layer_sizes_and_data_compatibility:
-
+class Test_check_layer_size_and_encoded_data_size:
     # valid cases
-    def test_returns_true_for_valid_n_cols_first_layer(self):
-        assert _check_layer_sizes_and_data_compatibility(100, 10) is None
+    def test_no_warn_for_valid_n_cols_first_layer(self):
+        assert _check_layer_size_and_encoded_data_size(100, 10) is None
 
-    def test_n_cols_equals_first_layer_size(self):
-        assert _check_layer_sizes_and_data_compatibility(8, 8) is None
+    def test_no_warn_for_n_cols_equals_first_layer_size(self):
+        assert _check_layer_size_and_encoded_data_size(8, 8) is None
 
-    def test_returns_true_for_valid_encoding_size_first_layer(self):
-        assert _check_layer_sizes_and_data_compatibility(100, 10, 5) is None
-
-    def test_returns_true_encoding_size_equals_first_layer(self):
-        with pytest.warns(
-            UserWarning,
-            match=r"layer_sizes\[0\]=8 is equal to `encoding_size`.",
-        ) as warn_info:
-            assert _check_layer_sizes_and_data_compatibility(64, 8, 8) is None
-
-        expected_message = (
-            "layer_sizes[0]=8 is equal to `encoding_size` "
-            "(ie. each chunk will consist of only 1 encoded allele)."
-        )
-        assert str(warn_info[0].message) == expected_message
-
-    # n_cols / first_layer_size related test error
     def test_warn_when_n_cols_is_not_divisible_by_first_layer_size(self):
         with pytest.warns(UserWarning, match="is not a divisor of n_cols"):
-            _check_layer_sizes_and_data_compatibility(10, 3)
+            _check_layer_size_and_encoded_data_size(10, 3)
 
     def test_warn_when_n_cols_is_lower_than_first_layer_size(self):
         with pytest.warns(UserWarning, match="is not a divisor of n_cols"):
-            _check_layer_sizes_and_data_compatibility(5, 10)
+            _check_layer_size_and_encoded_data_size(5, 10)
 
-    def test_warning_message_for_n_cols_first_layer_related_error(self):
+    def test_warning_message(self):
         with pytest.warns(UserWarning, match="is not a divisor of n_cols") as warn_info:
-            _check_layer_sizes_and_data_compatibility(13, 7)
+            _check_layer_size_and_encoded_data_size(13, 7)
 
         expected_message = (
             "layer_sizes[0]=7 is not a divisor of n_cols=13. "
@@ -362,18 +345,35 @@ class Test_check_layer_sizes_and_data_compatibility:
         )
         assert str(warn_info[0].message) == expected_message
 
-    # encoding_size / first_layer_size related error
+
+class Test_check_layer_size_and_encoding_compatibility:
+    def test_no_warn_for_valid_encoding_size_first_layer(self):
+        assert _check_layer_size_and_encoding_compatibility(10, 5) is None
+
+    def test_warn_when_encoding_size_equals_first_layer(self):
+        with pytest.warns(
+            UserWarning,
+            match=r"layer_sizes\[0\]=8 is equal to `encoding_size`.",
+        ) as warn_info:
+            assert _check_layer_size_and_encoding_compatibility(8, 8) is None
+
+        expected_message = (
+            "layer_sizes[0]=8 is equal to `encoding_size` "
+            "(ie. each chunk will consist of only 1 encoded allele)."
+        )
+        assert str(warn_info[0].message) == expected_message
+
     def test_warns_when_encoding_size_not_multiple_of_n_cols(self):
         with pytest.warns(UserWarning, match="is not a multiple of"):
-            _check_layer_sizes_and_data_compatibility(100, 10, 3)
+            _check_layer_size_and_encoding_compatibility(10, 3)
 
     def test_warns_when_encoding_size_larger_than_first_layer(self):
         with pytest.warns(UserWarning, match="is not a multiple of"):
-            _check_layer_sizes_and_data_compatibility(100, 10, 20)
+            _check_layer_size_and_encoding_compatibility(10, 20)
 
-    def test_warning_message_for_encoding_size_first_layer_related_error(self):
+    def test_warning_message(self):
         with pytest.warns(UserWarning, match=r"is not a multiple of") as warn_info:
-            _check_layer_sizes_and_data_compatibility(100, 10, 7)
+            _check_layer_size_and_encoding_compatibility(10, 7)
 
         expected_message = (
             "layer_sizes[0]=10 is not a multiple of encoding_size=7. "
@@ -840,15 +840,17 @@ class TestCompressionModel_initialisation_from_dataframe:
         self, basic_training_data: TrainingDataFixture
     ):
         # Just a smoke test, full validation done is done in
-        # TestCompressionModel_layer_sizes_and_data_incompatibility
-        with pytest.warns(
-            UserWarning,
-            match="is not a divisor of n_cols",
-        ):
+        # TestCompressionModel_layer_sizes and
+        # TestCompressionModel_training_encoded_geno_array
+        with pytest.warns(UserWarning) as warnings:
             CompressionModel.from_dataframe(
                 training_dataframe=basic_training_data.dataframe,
                 layer_sizes=[7, 3, 1],
             )
+
+        messages = [str(w.message) for w in warnings]
+        assert any("is not a multiple of encoding_size" in m for m in messages)
+        assert any("is not a divisor of n_cols" in m for m in messages)
 
 
 class TestCompressionModel_layer_sizes:
