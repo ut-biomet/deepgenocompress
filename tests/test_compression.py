@@ -951,6 +951,54 @@ class TestCompressionModel_training_markers_index:
         assert cm.training_markers_index is None
 
 
+class TestCompressionModel_encoding_map:
+    def test_setter_validate_map(self):
+        cm = CompressionModel()
+        with pytest.raises(ValueError, match=r"`encoding_map` is empty."):
+            cm.encoding_map = {}
+
+    def test_setter_warns_with_incompatible_layer_size(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        cm = CompressionModel(
+            training_encoded_geno_array=basic_training_data.encoded_array,
+            layer_sizes=[8, 4, 2],
+        )
+        # Specify encoding map witht size 3.
+        # n_cols (24) is divisible by 3 (8 markers).
+        # but chunk_size (8) is not a multiple of 3.
+        bad_encoding_map = {"A": [1.0, 0.0, 0.0]}
+        with pytest.warns(
+            UserWarning,
+            match="is not a multiple of encoding_size",
+        ):
+            cm.encoding_map = bad_encoding_map
+
+    def test_setter_raise_with_incompatible_marker_index(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        cm = CompressionModel(
+            training_encoded_geno_array=basic_training_data.encoded_array,
+            encoding_map=basic_training_data.encoding_map,
+            training_markers_index=basic_training_data.dataframe.columns,
+        )
+
+        # Encoding map with size 2.
+        # Expected markers = 24/2 = 12 != 6
+        bad_encoding_map = {"A": [0.0, 0.0]}
+        with pytest.raises(
+            ValueError, match=r"Marker index length missmatch training data size"
+        ):
+            cm.encoding_map = bad_encoding_map
+
+    def test_reset(self, initialised_compression_model: CompressionModel):
+        cm = initialised_compression_model
+        assert cm.encoding_map is not None
+
+        cm.encoding_map = None
+        assert cm.encoding_map is None
+
+
 class TestCompressionModel_fit:
     def test_raise_with_no_training_data_and_no_layer_sizes(
         self, default_compression_model: CompressionModel

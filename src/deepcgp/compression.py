@@ -33,7 +33,11 @@ from keras.optimizers import Adam
 from numpy.typing import ArrayLike, NDArray
 from sklearn.model_selection import train_test_split
 
-from .data_processing import build_one_hot_encoding_map, encode_snp_array
+from .data_processing import (
+    _validate_encoding_map,
+    build_one_hot_encoding_map,
+    encode_snp_array,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -526,18 +530,45 @@ class CompressionModel:
 
         self._training_markers_index = markers_index
 
-    encoding_map: Mapping[Any, list[float]] | None
-    """Mapping from allele values to their encoding vectors.
+    @property
+    def encoding_map(self) -> Mapping[Any, list[float]] | None:
+        """Mapping from allele values to their encoding vectors.
 
-    Used to determine the :attr:`encoding_size` for some internal validation.
+        Used to determine the :attr:`encoding_size` for some internal validation.
 
-    See Also
-    --------
-    :func:`build_one_hot_encoding_map` : Build a one-hot encoding map from a
-        genotype array.
-    :attr:`CompressionModel.encoding_size` : Length of the encoding vectors,
-        derived from this map.
-    """
+        See Also
+        --------
+        :func:`build_one_hot_encoding_map` : Build a one-hot encoding map from a
+            genotype array.
+        :attr:`CompressionModel.encoding_size` : Length of the encoding vectors,
+            derived from this map.
+        """
+        return self._encoding_map
+
+    @encoding_map.setter
+    def encoding_map(self, encoding_map: Mapping[Any, list[float]] | None):
+        if encoding_map is None:
+            self._encoding_map = None
+            return
+
+        _validate_encoding_map(encoding_map)
+
+        encoding_size = len(next(iter(encoding_map.values())))
+
+        if self.training_encoded_geno_array is not None:
+            if self.layer_sizes:
+                _check_layer_size_and_encoding_compatibility(
+                    first_layer_size=self.layer_sizes[0],
+                    encoding_size=encoding_size,
+                )
+            if self.training_markers_index is not None:
+                _check_marker_index_size_compatibility(
+                    self.training_markers_index,
+                    self._n_col_train,
+                    encoding_size,
+                )
+
+        self._encoding_map = encoding_map
 
     @property
     def encoding_size(self) -> int | None:
@@ -857,8 +888,7 @@ class CompressionModel:
         self._training_encoded_geno_array = None
         self._layer_sizes = []
         self._training_markers_index = None
-
-        self.encoding_map = encoding_map
+        self._encoding_map = None
 
         self.batch_size = batch_size
         self.epochs = epochs
@@ -885,6 +915,7 @@ class CompressionModel:
 
         self.training_encoded_geno_array = training_encoded_geno_array
         self.training_markers_index = training_markers_index
+        self.encoding_map = encoding_map
 
     @classmethod
     def from_dataframe(
