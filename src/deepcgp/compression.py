@@ -30,14 +30,10 @@ from keras.callbacks import EarlyStopping
 from keras.layers import Dense
 from keras.losses import Loss
 from keras.optimizers import Adam
-from numpy.typing import NDArray
+from numpy.typing import ArrayLike, NDArray
 from sklearn.model_selection import train_test_split
 
-from .data_processing import (
-    _validate_encoding_map,
-    build_one_hot_encoding_map,
-    encode_snp_array,
-)
+from .data_processing import build_one_hot_encoding_map, encode_snp_array
 
 logger = logging.getLogger(__name__)
 
@@ -223,6 +219,48 @@ class AutoencoderModels:
         self.encoder = Model(inputs=input_layer, outputs=encoder_layers, name="encoder")
         self.autoencoder = Model(
             inputs=input_layer, outputs=decoder_layers, name="autoencoder"
+        )
+
+
+def _check_marker_index_size_compatibility(
+    markers_index: pd.Index,
+    n_encoded_cols: int,
+    encoding_size: int,
+):
+    """Validate compatibility between encoded data dimensions and markers_index.
+
+    Raise error if the number of columns of the encoded data, the encoding size
+    and the length of the markers index doesnt match.
+
+    It is expected that: ``len(markers_index) == n_encoded_cols / encoding_size``
+
+
+    Parameters
+    ----------
+    markers_index :
+        Index of the geno markers.
+    n_encoded_cols :
+        Total number of columns in the encoded genotype array.
+    encoding_size :
+        Number of columns used to encode a single marker.
+
+    Raises
+    ------
+    ValueError
+        If ``len(markers_index) != n_encoded_cols / encoding_size``.
+
+    """
+    # Note: could be slightly improve if encoding_size is not available
+    # by checking n_encoded_cols is divisible by len(markers_index)
+    expected_n_markers = n_encoded_cols / encoding_size
+    if len(markers_index) != expected_n_markers:
+        raise ValueError(
+            "Marker index length missmatch training data size: "
+            f"len(training_markers_index) = {len(markers_index)}, "
+            f"encoded geno array have {n_encoded_cols} columns with an "
+            f"encoding size of {encoding_size}. "
+            f"({len(markers_index)} != {n_encoded_cols} / {encoding_size} "
+            f"= {expected_n_markers})."
         )
 
 
@@ -416,12 +454,26 @@ class CompressionModel:
         return self._training_encoded_geno_array
 
     @training_encoded_geno_array.setter
-    def training_encoded_geno_array(self, training_encoded_geno_array):
-        if self.layer_sizes and training_encoded_geno_array is not None:
+    def training_encoded_geno_array(
+        self, training_encoded_geno_array: NDArray[np.float32] | None
+    ):
+        if training_encoded_geno_array is None:
+            self._training_encoded_geno_array = None
+            return
+
+        if self.layer_sizes:
             _check_layer_sizes_and_data_compatibility(
                 n_cols=training_encoded_geno_array.shape[1],
                 first_layer_size=self.layer_sizes[0],
             )
+
+        if self.training_markers_index is not None and self.encoding_size is not None:
+            _check_marker_index_size_compatibility(
+                self.training_markers_index,
+                training_encoded_geno_array.shape[1],
+                self.encoding_size,
+            )
+
         self._training_encoded_geno_array = training_encoded_geno_array
 
     @property
@@ -430,6 +482,31 @@ class CompressionModel:
         if self.training_encoded_geno_array is None:
             return 0
         return self.training_encoded_geno_array.shape[1]
+
+    @property
+    def training_markers_index(self) -> pd.Index | None:
+        """List of training markers IDs.
+
+        Used to verify compatibility with training data before compression.
+        """
+        return self._training_markers_index
+
+    @training_markers_index.setter
+    def training_markers_index(self, training_markers_index: ArrayLike | None):
+        if training_markers_index is None:
+            self._training_markers_index = None
+            return
+        if self.training_encoded_geno_array is None or self.encoding_size is None:
+            self._training_markers_index = pd.Index(training_markers_index)
+            return
+
+        markers_index = pd.Index(training_markers_index)
+
+        _check_marker_index_size_compatibility(
+            markers_index, self._n_col_train, self.encoding_size
+        )
+
+        self._training_markers_index = markers_index
 
     encoding_map: Mapping[Any, list[float]] | None
     """Mapping from allele values to their encoding vectors.
@@ -740,6 +817,7 @@ class CompressionModel:
         # -- data --
         training_encoded_geno_array: NDArray[np.float32] | None = None,
         encoding_map: Mapping[Any, list[float]] | None = None,
+        training_markers_index: ArrayLike | None = None,
         # -- autoencoders --
         layer_sizes: list[int] | tuple[int, ...] | None = None,
         # -- fitting --
@@ -755,6 +833,7 @@ class CompressionModel:
         """Initialise compression model."""
         self._training_encoded_geno_array = None
         self._layer_sizes = []
+        self._training_markers_index = None
 
         self.encoding_map = encoding_map
 
@@ -782,6 +861,7 @@ class CompressionModel:
         )
 
         self.training_encoded_geno_array = training_encoded_geno_array
+        self.training_markers_index = training_markers_index
 
     @classmethod
     def from_dataframe(
@@ -821,6 +901,7 @@ class CompressionModel:
         return cls(
             training_encoded_geno_array=training_encoded_geno_array,
             encoding_map=encoding_map,
+            training_markers_index=training_dataframe.columns,
             **kwargs,
         )
 

@@ -490,6 +490,7 @@ class TestCompressionModel_basic_initialisation:
         assert default_compression_model.training_size == 0.4
         assert default_compression_model.validation_size == 0.5
         assert default_compression_model.layer_sizes == []
+        assert default_compression_model.training_markers_index is None
 
         assert isinstance(default_compression_model.fitting_callbacks, list)
         assert len(default_compression_model.fitting_callbacks) == 1
@@ -517,6 +518,7 @@ class TestCompressionModel_basic_initialisation:
             seed=42,
             training_size=0.8,
             validation_size=0.2,
+            training_markers_index=basic_training_data.dataframe.columns,
         )
         assert model.training_encoded_geno_array is not None
         assert np.array_equal(
@@ -532,6 +534,10 @@ class TestCompressionModel_basic_initialisation:
         assert model.seed == 42
         assert model.training_size == 0.8
         assert model.validation_size == 0.2
+        assert isinstance(model.training_markers_index, pd.Index)
+        assert model.training_markers_index.equals(
+            basic_training_data.dataframe.columns
+        )
 
         assert model.is_fitted is False
         assert model.autoencoder_models == []
@@ -572,6 +578,19 @@ class TestCompressionModel_basic_initialisation:
             CompressionModel(
                 training_encoded_geno_array=basic_training_data.encoded_array,
                 layer_sizes=[7, 3, 1],
+            )
+
+    def test_raise_with_incompatible_index_and_training_data(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        with pytest.raises(
+            ValueError,
+            match=r"Marker index length missmatch training data size",
+        ):
+            CompressionModel(
+                training_encoded_geno_array=basic_training_data.encoded_array,
+                encoding_map=basic_training_data.encoding_map,
+                training_markers_index=["A", "B"],
             )
 
 
@@ -730,6 +749,15 @@ class TestCompressionModel_initialisation_from_dataframe:
         ):
             CompressionModel.from_dataframe(training_dataframe=geno_data)
 
+    def test_training_markers_index_is_correctly_set(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe,
+        )
+        assert cm.training_markers_index is not None
+        assert cm.training_markers_index.equals(basic_training_data.dataframe.columns)
+
     def test_encoding_map_is_validated(
         self, basic_training_data: TrainingDataFixture, mocker: MockerFixture
     ):
@@ -857,6 +885,18 @@ class TestCompressionModel_training_encoded_geno_array:
                 basic_training_data.encoded_array
             )
 
+    def test_setter_raise_when_incompatible_with_marker_index(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        cm = CompressionModel(
+            encoding_map=basic_training_data.encoding_map,
+            training_markers_index=["A", "B"],
+        )
+        with pytest.raises(
+            ValueError,
+            match=r"Marker index length missmatch training data size",
+        ):
+            cm.training_encoded_geno_array = basic_training_data.encoded_array
 
     def test_reset(self, initialised_compression_model: CompressionModel):
         cm = initialised_compression_model
@@ -865,6 +905,48 @@ class TestCompressionModel_training_encoded_geno_array:
         assert cm.training_encoded_geno_array is None
         assert cm.n_chunks == 0
         assert cm._n_col_train == 0
+
+
+class TestCompressionModel_training_markers_index:
+    @pytest.fixture(
+        params=[
+            pytest.param(["A", "B", "C"], id="list"),
+            pytest.param(np.array(["D", "E"]), id="np.array"),
+            pytest.param(pd.Index(["F"]), id="pd.Index"),
+        ]
+    )
+    def index_of_various_types(self, request):
+        # Note: they do not match with basic_training_data size
+        return request.param
+
+    def test_setter_accept_none(self):
+        cm = CompressionModel()
+        cm.training_markers_index = None
+        assert cm.training_markers_index is None
+
+    def test_setter_accept_different_types(self, index_of_various_types):
+        cm = CompressionModel()
+        cm.training_markers_index = index_of_various_types
+        training_markers_index = cm.training_markers_index
+        assert isinstance(training_markers_index, pd.Index)
+        assert training_markers_index.equals(pd.Index(index_of_various_types))
+
+    def test_setter_raise_if_incompatible_with_training_data(
+        self, initialised_compression_model, index_of_various_types
+    ):
+        cm = initialised_compression_model
+        with pytest.raises(
+            ValueError,
+            match=r"Marker index length missmatch training data size",
+        ):
+            cm.training_markers_index = index_of_various_types
+
+    def test_reset(self, initialised_compression_model: CompressionModel):
+        cm = initialised_compression_model
+        assert cm.training_markers_index is not None
+
+        cm.training_markers_index = None
+        assert cm.training_markers_index is None
 
 
 class TestCompressionModel_fit:
