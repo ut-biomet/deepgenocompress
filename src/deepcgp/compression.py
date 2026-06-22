@@ -456,11 +456,6 @@ class CompressionModel:
     """
 
     # TODO:
-    # use raw data as input directly:
-    #    geno_df
-    #    missing_values
-    #    encoding_map
-    # we should keep the markers "IDs" to validate later compressions
     #
     # simpler alternative for layer_sizes:
     #    chunk_size, desired chunk size (first value of layers_sizes)
@@ -1092,7 +1087,14 @@ class CompressionModel:
         """
         if not self.is_fitted:
             raise RuntimeError("Model is not fitted.")
-        self._check_compatibility_with_training_data(encoded_geno_array)
+
+        if encoded_geno_array.shape[1] != self._n_col_train:
+            raise ValueError(
+                f"Incompatible data. Provided data have a different number of columns "
+                f"({encoded_geno_array.shape[1]}) than the training data "
+                f"({self._n_col_train})"
+            )
+
         data_splits = _split_data(
             encoded_geno_array=encoded_geno_array,
             chunk_size=self.chunk_size,
@@ -1112,15 +1114,76 @@ class CompressionModel:
 
         return np.hstack(encoded_chunks)
 
-    def _check_compatibility_with_training_data(self, data):
-        """Check ``data`` is compatible with the training data.
+    def compress_dataframe(
+        self,
+        geno_dataframe: pd.DataFrame,
+        batch_size: int | None = None,
+        encoding_map: Mapping[Any, list[float]] | None = None,
+        missing_values: Collection = {"N"},
+    ) -> NDArray[np.float32]:
+        """Compress genotype data using the fitted autoencoders.
 
-        Currently only validates the number of columns.
+        Encode the input data.frame to an array (using
+        :attr:`CompressionModel.encoding_map` or ``encoding_map`` and
+        ``missing_values``), splits the array into chunks matching the training chunk
+        size, runs each chunk through its corresponding encoder, and returns the
+        horizontally stacked compressed representations.
+
+        Parameters
+        ----------
+        geno_dataframe :
+            Raw genotype data.frame to compress.
+        batch_size :
+            (Optional) Batch size for encoder prediction. Defaults to
+            ``self.batch_size`` if not provided.
+        encoding_map :
+            (Optional) The encoding map to use for the encoding.
+            Defaults to ``None``, in which case the encoding will be done with:
+
+            1. :attr:`CompressionModel.encoding_map` if it is set.
+            2. Or, :func:`encode_snp_array`'s default behaviour when not provided
+               an encoding_map
+
+        missing_values :
+            (Optional), Only effective if ``encoding_map`` is ``None``. Any object
+            supporting the ``in`` operator (e.g. set, list, tuple).
+            Collection of value of ``geno_dataframe`` representing
+            missing genotype calls that should not be assigned a default one hot
+            encoding vector. They will be encoded as a zero vector.
+            Defaults to ``{"N"}``.
+
+        Returns
+        -------
+            Array of shape ``(n_samples, n_chunks * latent_dim)``,
+            where ``latent_dim`` is ``self.layer_sizes[-1]`` representing
+            the compressed genomic data.
+
+        Raises
+        ------
+        RuntimeError
+            If the model has not been fitted yet (i.e.
+            :attr:`CompressionModel.is_fitted` is ``False``).
+        ValueError
+            If the set of ``geno_dataframe``'s columns index is different from
+            the one from the training data (i.e.
+            :attr:`CompressionModel.training_markers_index`)
+        ValueError
+            If ``geno_dataframe`` has a different number of markers than
+            the training data.
         """
-        # TODO: validation with marker IDs (when we will create the instance from
-        # pd.Dataframe)
-        if data.shape[1] != self._n_col_train:
-            raise ValueError(
-                f"Incompatible data. Provided data have a different number of columns "
-                f"({data.shape[1]}) than the training data ({self._n_col_train})"
-            )
+        if self.training_markers_index is not None:
+            if set(self.training_markers_index) != set(geno_dataframe.columns):
+                raise ValueError(
+                    "Incompatible data. Provided data have different column index "
+                    "than the training data."
+                )
+            geno_dataframe = geno_dataframe.loc[:, self.training_markers_index]
+
+        geno_array = geno_dataframe.to_numpy()
+
+        encoded_geno_array = encode_snp_array(
+            geno_array,
+            missing_values=missing_values,
+            encoding_map=encoding_map or self.encoding_map,
+        )
+        return self.compress(encoded_geno_array, batch_size=batch_size)

@@ -1301,6 +1301,221 @@ class TestCompressionModel_compress:
         assert result.dtype == np.float32
 
 
+class TestCompressionModel_compress_dataframe:
+
+    def test_raise_when_model_is_not_fitted(
+        self,
+        default_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+    ):
+        with pytest.raises(
+            RuntimeError,
+            match=r"Model is not fitted\.",
+        ):
+            default_compression_model.compress_dataframe(basic_training_data.dataframe)
+
+    def test_raise_when_column_index_does_not_match_training_data_index(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+    ):
+        """Columns present but with different names should raise."""
+        bad_df = basic_training_data.dataframe.copy()
+        bad_df.columns = [f"wrong_marker_{i}" for i in range(bad_df.shape[1])]
+        with pytest.raises(
+            ValueError,
+            match=r"^Incompatible data. Provided data have different column index",
+        ):
+            fitted_compression_model.compress_dataframe(bad_df)
+
+    def test_raise_when_columns_are_subset_of_training_markers(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+    ):
+        """Different number of columns should raise. With `training_markers_index`
+        error is about the index."""
+        partial_df = basic_training_data.dataframe.iloc[:, :-1]
+        with pytest.raises(
+            ValueError,
+            match=r"^Incompatible data. Provided data have different column index",
+        ):
+            fitted_compression_model.compress_dataframe(partial_df)
+
+    def test_raise_when_columns_are_subset_of_training_markers_even_without_saved_index(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+    ):
+        """Different number of columns should raise. Without `training_markers_index`
+        error is about the number of columns."""
+        partial_df = basic_training_data.dataframe.iloc[:, :-1]
+
+        fitted_compression_model.training_markers_index = None  # remove index
+        with pytest.raises(
+            ValueError,
+            match=(
+                r"^Incompatible data. Provided data have a different number of columns "
+            ),
+        ):
+            fitted_compression_model.compress_dataframe(partial_df)
+
+    def test_column_reordering(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+        mocker: MockerFixture,
+    ):
+        """Shuffled columns should be reordered internally before
+        encoding/compression."""
+        shuffled_df = basic_training_data.dataframe.sample(
+            frac=1, axis=1, random_state=0
+        )
+        assert not shuffled_df.columns.equals(basic_training_data.dataframe.columns)
+
+        mock_encode_snp_array = mocker.patch(
+            "deepcgp.compression.encode_snp_array",
+            wraps=encode_snp_array,
+        )
+        fitted_compression_model.compress_dataframe(shuffled_df)
+
+        mock_encode_snp_array.assert_called_once()
+        np.testing.assert_array_equal(
+            mock_encode_snp_array.call_args.args[0],
+            basic_training_data.dataframe.to_numpy(),
+        )
+
+    def test_result_matches_compress_on_manually_encoded_array(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+    ):
+        """compress_dataframe should be equivalent to manually encoding then calling
+        compress."""
+        result_dataframe = fitted_compression_model.compress_dataframe(
+            basic_training_data.dataframe
+        )
+        result_array = fitted_compression_model.compress(
+            basic_training_data.encoded_array
+        )
+        np.testing.assert_array_almost_equal(result_dataframe, result_array)
+
+    @pytest.mark.parametrize(
+        "encoding_map, expected_encoding_map",
+        [
+            (None, "USE_MODEL_ENCODING_MAP"),
+            (
+                {"A": [0, 0, 0, 1], "B": [1, 0, 0, 0]},
+                {"A": [0, 0, 0, 1], "B": [1, 0, 0, 0]},
+            ),
+        ],
+        ids=["None", "custom"],
+    )
+    def test_use_correct_encoding_map_when_CM_have_encoding_map(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+        encoding_map,
+        expected_encoding_map,
+        mocker: MockerFixture,
+    ):
+        """
+        When the CompressionModel instance have the encoding map,
+        it should be used when provided `encoding_map` is None, else
+        use provided `encoding_map`.
+        """
+        if expected_encoding_map == "USE_MODEL_ENCODING_MAP":
+            expected_encoding_map = fitted_compression_model.encoding_map
+
+        mock_encode_snp_array = mocker.patch(
+            "deepcgp.compression.encode_snp_array",
+            wraps=encode_snp_array,
+        )
+
+        fitted_compression_model.compress_dataframe(
+            basic_training_data.dataframe, encoding_map=encoding_map
+        )
+        mock_encode_snp_array.assert_called_once()
+        assert (
+            mock_encode_snp_array.call_args.kwargs["encoding_map"]
+            == expected_encoding_map
+        )
+
+    @pytest.mark.parametrize(
+        "encoding_map",
+        [None, {"A": [0, 0, 0, 1], "B": [1, 0, 0, 0]}],
+        ids=["None", "custom"],
+    )
+    def test_forward_encoding_map_when_CM_do_not_have_encoding_map(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+        encoding_map,
+        mocker: MockerFixture,
+    ):
+        """
+        When the CompressionModel instance do not have the encoding map,
+        it pass the provided `encoding_map` to encode_snp_array.
+        """
+        fitted_compression_model.encoding_map = None
+
+        mock_encode_snp_array = mocker.patch(
+            "deepcgp.compression.encode_snp_array",
+            wraps=encode_snp_array,
+        )
+
+        fitted_compression_model.compress_dataframe(
+            basic_training_data.dataframe, encoding_map=encoding_map
+        )
+        mock_encode_snp_array.assert_called_once()
+        assert mock_encode_snp_array.call_args.kwargs["encoding_map"] == encoding_map
+
+    def test_default_missing_value(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+        mocker: MockerFixture,
+    ):
+        mock_encode_snp_array = mocker.patch(
+            "deepcgp.compression.encode_snp_array",
+            wraps=encode_snp_array,
+        )
+
+        fitted_compression_model.compress_dataframe(basic_training_data.dataframe)
+        mock_encode_snp_array.assert_called_once()
+        assert mock_encode_snp_array.call_args.kwargs["missing_values"] == {"N"}
+
+    def test_forward_missing_value(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+        mocker: MockerFixture,
+    ):
+        mock_encode_snp_array = mocker.patch(
+            "deepcgp.compression.encode_snp_array",
+            wraps=encode_snp_array,
+        )
+
+        fitted_compression_model.compress_dataframe(
+            basic_training_data.dataframe, missing_values={"-", "."}
+        )
+        mock_encode_snp_array.assert_called_once()
+        assert mock_encode_snp_array.call_args.kwargs["missing_values"] == {"-", "."}
+
+    def test_raise_if_missing_values_is_inconsitent_with_saved_encoding_map(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+    ):
+        with pytest.raises(
+            ValueError,
+            match=r"Missing values not encoded with a vector of 0",
+        ):
+            fitted_compression_model.compress_dataframe(
+                basic_training_data.dataframe, missing_values={"A"}
+            )
+
+
 def test_public_api_exports():
     import deepcgp
 
