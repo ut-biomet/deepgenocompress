@@ -73,8 +73,7 @@ The makes commands will probbly fail on a Windows environment (maybe try with Gi
 | Run tests                                                                                                                               | `make tests`             |
 | Lint and type-check the code (using [`ruff`](https://docs.astral.sh/ruff/) and [`basedpyright`](https://docs.basedpyright.com/latest/)) | `make python_checks`     |
 | Build the documentation                                                                                                                 | `make doc`               |
-| Format the code (also clean notebooks outputs)                                                                                          | `make format`            |
-| Execute notebooks and export to html                                                                                                    | `make notebooks_html`    |
+| Format the code                                                                                                                         | `make format`            |
 | Add a new dependency                                                                                                                    | `uv add <package>`       |
 | Add a dev dependency                                                                                                                    | `uv add --dev <package>` |
 

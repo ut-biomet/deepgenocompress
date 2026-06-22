@@ -11,7 +11,6 @@ format:
 	git ls-files -- "*.py" | xargs docformatter --in-place || [ $$? -eq 123 ]
 	# rerun docformatter without catching 123 to catch possible other errors
 	git ls-files -- "*.py" | xargs docformatter --in-place
-	git ls-files -- "*.ipynb" | xargs jupyter nbconvert --clear-output --inplace
 	command -v nixfmt >/dev/null 2>&1 && git ls-files -- "*.nix" | xargs nixfmt || true
 
 format-check:
@@ -26,10 +25,6 @@ python_checks:
 
 tests:
 	pytest -v
-
-notebooks_html:
-	git ls-files -- "*.ipynb" | xargs jupyter nbconvert --to notebook --execute --inplace
-	git ls-files -- "*.ipynb" | xargs jupyter nbconvert --to html
 
 doc:
 	make -C docs clean_quarto_pages && make -C docs quarto_pages
