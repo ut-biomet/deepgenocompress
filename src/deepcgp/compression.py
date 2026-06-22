@@ -915,14 +915,48 @@ class CompressionModel:
         missing_values: Collection = {"N"},
         **kwargs,
     ) -> "CompressionModel":
-        """Initialise from a training data frame.
+        """Initialise a CompressionModel from a genotype DataFrame.
 
-        TODO
+        Encodes the DataFrame into a genotype array and constructs a
+        CompressionModel with the encoded data, encoding map, and marker index
+        derived from the DataFrame's columns.
 
-        A dictionary mapping each allele to its encoding vector. If None, a one-hot
-        encoding map is built automatically from the unique alleles found in
-        ``geno_array`` using :func:`build_one_hot_encoding_map` excluding
-        ``missing_values``
+        Parameters
+        ----------
+        training_dataframe :
+            Raw genotype DataFrame where rows are samples and columns are markers.
+            Must not be empty.
+        encoding_map :
+            Mapping from allele values to their encoding vectors. If ``None``,
+            a one-hot encoding map is built automatically from the unique alleles
+            found in ``training_dataframe``, excluding ``missing_values``.
+            See :func:`build_one_hot_encoding_map`.
+        missing_values :
+            Collection of values representing missing genotype calls. These are
+            encoded as zero vectors rather than assigned a one-hot encoding.
+            Defaults to ``{"N"}``.
+        **kwargs :
+            Additional keyword arguments passed to :class:`CompressionModel`.
+            ``training_encoded_geno_array`` cannot be passed, as it is derived
+            from ``training_dataframe``.
+
+        Returns
+        -------
+        CompressionModel
+            A new instance initialised with the encoded training data, encoding
+            map, and marker index from ``training_dataframe``.
+
+        Raises
+        ------
+        ValueError
+            If ``training_dataframe`` is empty.
+        ValueError
+            If ``training_encoded_geno_array`` is passed as a keyword argument.
+
+        See Also
+        --------
+        :func:`build_one_hot_encoding_map` : Builds the default encoding map.
+        :func:`encode_snp_array` : Encodes the raw genotype array.
         """
         if training_dataframe.empty:
             raise ValueError(
