@@ -81,8 +81,7 @@ os.makedirs(TUNE_OUTPUT, exist_ok=True)
 
 
 def build_autoencoder(input_dim, hidden_dim, bottleneck_dim, learning_rate):
-    """
-    Build a simple symmetric autoencoder.
+    """Build a simple symmetric autoencoder.
 
     The structure is:
 
@@ -106,7 +105,6 @@ def build_autoencoder(input_dim, hidden_dim, bottleneck_dim, learning_rate):
     learning_rate :
         Learning rate for Adam optimizer.
     """
-
     # The hidden layer and bottleneck should not be the same as the input.
     if hidden_dim >= input_dim:
         raise ValueError(
@@ -148,8 +146,7 @@ def build_autoencoder(input_dim, hidden_dim, bottleneck_dim, learning_rate):
 
 
 def generate_architecture_options(input_dim):
-    """
-    Create simple architecture options.
+    """Create simple architecture options.
 
     This keeps the autoencoder shape simple:
 
@@ -164,7 +161,6 @@ def generate_architecture_options(input_dim):
     The hidden layer and bottleneck are always smaller than the input.
     The bottleneck is always smaller than the hidden layer.
     """
-
     options = []
 
     # Main option: clean half-and-quarter compression.
@@ -211,16 +207,13 @@ def generate_architecture_options(input_dim):
 def prepare_chunk_training_data(
     data_array, input_dim, subset_snps=100_000, max_chunks=100, random_state=42
 ):
-    """
-    Take a SNP subset, split it into fixed-size chunks, and stack selected chunks.
+    """Take a SNP subset, split it into fixed-size chunks, and stack selected chunks.
 
     Each chunk has input_dim columns.
 
-    If the number of features is not divisible by input_dim, zero columns are
-    added at the end. This keeps all original features and makes the last chunk
-    complete.
+    If the number of features is not divisible by input_dim, zero columns are added at
+    the end. This keeps all original features and makes the last chunk complete.
     """
-
     subset_features = subset_snps * 4
     full = data_array[:, :subset_features]
 
@@ -279,13 +272,11 @@ def prepare_chunk_training_data(
 def run_tuning_pipeline(
     data_array, subset_snps=100_000, input_dims=None, max_chunks=100
 ):
-    """
-    Run hyperparameter tuning.
+    """Run hyperparameter tuning.
 
-    Validation loss is used to choose the best parameters.
-    Test loss is calculated only once at the end for the selected best model.
+    Validation loss is used to choose the best parameters. Test loss is calculated only
+    once at the end for the selected best model.
     """
-
     if input_dims is None:
         input_dims = [28, 56, 112]
 
@@ -494,4 +485,3 @@ if __name__ == "__main__":
     formatted_time = str(datetime.timedelta(seconds=int(elapsed)))
 
     print(f"\nTotal time: {formatted_time} (days:hh:mm:ss)")
-

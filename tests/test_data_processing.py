@@ -37,8 +37,9 @@ def missing_values_fixt(request):
 
 @pytest.fixture
 def basic_geno_array_with_missing_values(missing_values_fixt):
-    """Build geno array with missing values by cycling the given list of missing values.
-
+    """Build geno array with missing values by cycling the given list of missing
+    values."""
+    """
     eg. with ``["N"]`` (default) returns (ACGT masked):
         [
             [   , "N",    ,    ,    , "N",    ],
@@ -64,7 +65,7 @@ def basic_geno_array_with_missing_values(missing_values_fixt):
 
 
 class TestValidateEncodingMap:
-    """Tests for _validate_encoding_map functions"""
+    """Tests for _validate_encoding_map functions."""
 
     def test_raise_if_not_dict(self):
         encoding_map = [[0, 0, 1], [0, 0, 1], [0, 0, 1]]
@@ -175,7 +176,7 @@ class TestValidateEncodingMap:
 
 
 class TestBuildOneHotEncodingMap:
-    """Tests for build_one_hot_encoding_map functions"""
+    """Tests for build_one_hot_encoding_map functions."""
 
     def test_returns_dict(self, basic_geno_array):
         result = build_one_hot_encoding_map(basic_geno_array)
@@ -293,7 +294,7 @@ class TestBuildOneHotEncodingMap:
         ids=["None", "np.nan", "pd.NA"],
     )
     def test_with_special_missing_values(self, miss_val):
-        """those are always excluded even if not specifyed in excluded."""
+        """Those are always excluded even if not specifyed in excluded."""
         # `geno_array` must be numeric else np.nan is converted to the string "nan"
         geno_array = np.array(
             [
@@ -314,7 +315,7 @@ class TestBuildOneHotEncodingMap:
         ids=["None", "np.nan", "pd.NA"],
     )
     def test_special_missing_values_can_be_given_in_exclude(self, miss_val):
-        """Even if not necessary check it doesn't crash"""
+        """Even if not necessary check it doesn't crash."""
         geno_array_str = np.array([["A", "C", "G", "T"]])
         result_str = build_one_hot_encoding_map(geno_array_str, exclude=[miss_val])
         assert result_str == {
@@ -349,7 +350,7 @@ class TestBuildOneHotEncodingMap:
 
 
 class TestEncodeSnpArray:
-    """Tests for encode_snp_array functions"""
+    """Tests for encode_snp_array functions."""
 
     @pytest.fixture
     def basic_encoding_map(self):
@@ -452,7 +453,7 @@ class TestEncodeSnpArray:
         )
 
     def test_missing_allele_are_encoded_with_vector_of_0(self, basic_encoding_map):
-        """Missing allele as empty string"""
+        """Missing allele as empty string."""
         encoding_values_len = len(basic_encoding_map["A"])
         geno_unkown = np.array([[""]])
 

@@ -42,7 +42,7 @@ def basic_autoencoder_models(layer_sizes):
 
 
 class TestAutoencoderModels:
-    """Tests for `AutoencoderModels` class"""
+    """Tests for `AutoencoderModels` class."""
 
     def test_both_are_keras_models(self, basic_autoencoder_models):
         assert isinstance(basic_autoencoder_models.autoencoder, Model)
@@ -1333,8 +1333,10 @@ class TestCompressionModel_compress_dataframe:
         fitted_compression_model: CompressionModel,
         basic_training_data: TrainingDataFixture,
     ):
-        """Different number of columns should raise. With `training_markers_index`
-        error is about the index."""
+        """Different number of columns should raise.
+
+        With `training_markers_index` error is about the index.
+        """
         partial_df = basic_training_data.dataframe.iloc[:, :-1]
         with pytest.raises(
             ValueError,
@@ -1347,8 +1349,10 @@ class TestCompressionModel_compress_dataframe:
         fitted_compression_model: CompressionModel,
         basic_training_data: TrainingDataFixture,
     ):
-        """Different number of columns should raise. Without `training_markers_index`
-        error is about the number of columns."""
+        """Different number of columns should raise.
+
+        Without `training_markers_index` error is about the number of columns.
+        """
         partial_df = basic_training_data.dataframe.iloc[:, :-1]
 
         fitted_compression_model.training_markers_index = None  # remove index
@@ -1419,11 +1423,8 @@ class TestCompressionModel_compress_dataframe:
         expected_encoding_map,
         mocker: MockerFixture,
     ):
-        """
-        When the CompressionModel instance have the encoding map,
-        it should be used when provided `encoding_map` is None, else
-        use provided `encoding_map`.
-        """
+        """When the CompressionModel instance have the encoding map, it should be used
+        when provided `encoding_map` is None, else use provided `encoding_map`."""
         if expected_encoding_map == "USE_MODEL_ENCODING_MAP":
             expected_encoding_map = fitted_compression_model.encoding_map
 
@@ -1453,10 +1454,8 @@ class TestCompressionModel_compress_dataframe:
         encoding_map,
         mocker: MockerFixture,
     ):
-        """
-        When the CompressionModel instance do not have the encoding map,
-        it pass the provided `encoding_map` to encode_snp_array.
-        """
+        """When the CompressionModel instance do not have the encoding map, it pass the
+        provided `encoding_map` to encode_snp_array."""
         fitted_compression_model.encoding_map = None
 
         mock_encode_snp_array = mocker.patch(

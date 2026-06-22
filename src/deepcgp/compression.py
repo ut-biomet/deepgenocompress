@@ -81,7 +81,6 @@ def _check_layer_sizes(layer_sizes):
         If ``layer_sizes`` has a length lower than 2.
     ValueError
         If ``layer_sizes``'s values are not integers.
-
     """
     if not isinstance(layer_sizes, (list, tuple)):
         raise TypeError(
@@ -163,8 +162,12 @@ class AutoencoderModels:
 
     autoencoder: Model
     """The full autoencoder keras model."""
+
     encoder: Model
-    """The encoder keras model. (Shares same layers with the autoencoder)"""
+    """The encoder keras model.
+
+    (Shares same layers with the autoencoder)
+    """
 
     is_fitted: bool = False
     """Is the model fitted?
@@ -252,7 +255,6 @@ def _check_marker_index_size_compatibility(
     ------
     ValueError
         If ``len(markers_index) != n_encoded_cols / encoding_size``.
-
     """
     # Note: could be slightly improve if encoding_size is not available
     # by checking n_encoded_cols is divisible by len(markers_index)
@@ -290,7 +292,6 @@ def _check_layer_size_and_encoded_data_size(n_cols, first_layer_size):
     UserWarning
         If ``first_layer_size`` is not a divisor of ``n_cols`` — zero-padding
         will be required to fit the data into equal-sized chunks.
-
     """
     if n_cols % first_layer_size != 0:
         warnings.warn(
@@ -330,7 +331,6 @@ def _check_layer_size_and_encoding_compatibility(first_layer_size, encoding_size
     UserWarning
         If ``encoding_size`` is provided and equals ``first_layer_size`` —
         each chunk will consist of exactly one encoded allele.
-
     """
     if first_layer_size % encoding_size != 0:
         warnings.warn(
@@ -390,7 +390,6 @@ def _split_data(
     UserWarning
         If ``encoding_size`` is provided and equals ``chunk_size`` — each
         chunk will contain exactly one encoded allele.
-
     """
     n_cols: int = encoded_geno_array.shape[1]
 
@@ -430,29 +429,35 @@ class CompressionModel:
     training_encoded_geno_array :
         Encoded genotype array used for training. Can be set after initialisation.
     encoding_map :
-        Mapping from allele values to their encoding vectors. See :attr:`encoding_map`
+        Mapping from allele values to their encoding vectors. See
+        :attr:`CompressionModel.encoding_map`
     layer_sizes :
-        Dimensions of each autoencoder layer. See :attr:`layer_sizes`.
+        Dimensions of each autoencoder layer. See :attr:`CompressionModel.layer_sizes`.
     batch_size :
         Number of samples per batch during training and compression.
-        See :attr:`batch_size`.
+        See :attr:`CompressionModel.batch_size`.
     epochs :
-        Maximum number of training epochs per autoencoder. See :attr:`epochs`.
+        Maximum number of training epochs per autoencoder. See
+        :attr:`CompressionModel.epochs`.
     fitting_callbacks :
-        Keras callbacks applied during training. See :attr:`fitting_callbacks`.
+        Keras callbacks applied during training. See
+        :attr:`CompressionModel.fitting_callbacks`.
     learning_rate :
-        Learning rate for the Adam optimiser. See :attr:`learning_rate`.
+        Learning rate for the Adam optimiser. See
+        :attr:`CompressionModel.learning_rate`.
     loss :
-        Loss function used to compile each autoencoder. See :attr:`loss`.
+        Loss function used to compile each autoencoder. See
+        :attr:`CompressionModel.loss`.
     seed :
-        Random seed for the train/validation/evaluation split. See :attr:`seed`.
+        Random seed for the train/validation/evaluation split. See
+        :attr:`CompressionModel.seed`.
     training_size :
         Proportion or absolute number of samples used for training.
-        See :attr:`training_size`.
+        See :attr:`CompressionModel.training_size`.
     validation_size :
         Proportion or absolute number of the remaining samples used for
-        validation; the rest form the evaluation set. See :attr:`validation_size`.
-
+        validation; the rest form the evaluation set. See
+        :attr:`CompressionModel.validation_size`.
     """
 
     # TODO:
@@ -529,7 +534,8 @@ class CompressionModel:
     def encoding_map(self) -> Mapping[Any, list[float]] | None:
         """Mapping from allele values to their encoding vectors.
 
-        Used to determine the :attr:`encoding_size` for some internal validation.
+        Used to determine the :attr:`CompressionModel.encoding_size` for some internal
+        validation.
 
         See Also
         --------
@@ -578,7 +584,6 @@ class CompressionModel:
             is derived from.
         :attr:`CompressionModel.chunk_size` : The chunk size validated against
             this value.
-
         """
         if self.encoding_map is None:
             return None
@@ -609,7 +614,6 @@ class CompressionModel:
         See Also
         --------
         :attr:`CompressionModel.chunk_size` : The number of columns of each chunk.
-
         """
         return len(self._train_data_chunks)
 
@@ -625,7 +629,6 @@ class CompressionModel:
         --------
         :attr:`CompressionModel.layer_sizes` : Autoencoder layer dimensions.
         :attr:`CompressionModel.n_chunks` : Number of chunks the data is split into.
-
         """
         return self.layer_sizes[0] if self.layer_sizes else 0
 
@@ -642,9 +645,8 @@ class CompressionModel:
     :meth:`CompressionModel.fit`
     :meth:`CompressionModel.compress`
     """
-
     epochs: int
-    """Number of epochs to train the model
+    """Number of epochs to train the model.
 
     Passed to Keras's model ``fit`` methods.
 
@@ -653,7 +655,6 @@ class CompressionModel:
     `keras.Model.fit <https://keras.io/api/models/model_training_apis/#fit-method>`_
     :meth:`CompressionModel.fit`
     """
-
     fitting_callbacks: list
     """List of callbacks to apply during training.
 
@@ -665,7 +666,6 @@ class CompressionModel:
     `keras.callbacks <https://keras.io/api/callbacks/>`_
     :meth:`CompressionModel.fit`
     """
-
     learning_rate: float
     """Learning rate for the Adam optimizer used to compile each autoencoder.
 
@@ -674,7 +674,6 @@ class CompressionModel:
     `keras.optimizers.Adam <https://keras.io/api/optimizers/adam/>`_
     :meth:`CompressionModel.fit`
     """
-
     loss: str | Loss = "mse"
     """Loss function used to compile each autoencoder.
 
@@ -686,7 +685,6 @@ class CompressionModel:
     `keras.losses <https://keras.io/api/losses/>`_
     :meth:`CompressionModel.fit`
     """
-
     seed: int | None
     """Random seed used for the train/test split during fitting.
 
@@ -703,13 +701,12 @@ class CompressionModel:
     --------
     :meth:`CompressionModel.fit`
     """
-
     training_size: int | float
     """Proportion or absolute number of samples used for training each autoencoder.
 
     Passed as ``train_size`` to :func:`sklearn.model_selection.train_test_split`.
     The remaining samples are further split into validation and evaluation sets
-    according to :attr:`validation_size`.
+    according to :attr:`CompressionModel.validation_size`.
 
     Important
     ---------
@@ -723,18 +720,18 @@ class CompressionModel:
         remaining data into validation and evaluation sets.
     :meth:`CompressionModel.fit` : Where the split is performed.
     """
-
     validation_size: int | float
     """Proportion or absolute number of the non-training samples used for validation.
 
-    After the training split (controlled by :attr:`training_size`), the remaining
-    samples are further split into a validation set and an evaluation set with a
-    second call to :func:`sklearn.model_selection.train_test_split` on the remaining
+    After the training split (controlled by :attr:`CompressionModel.training_size`), the
+    remaining samples are further split into a validation set and an evaluation set with
+    a second call to :func:`sklearn.model_selection.train_test_split` on the remaining
     data. The validation set is passed to Keras's ``fit`` as ``validation_data``,
     while the evaluation set is passed to ``evaluate``.
 
     If set to ``1.0``, all remaining samples go to validation and no evaluation
-    is performed (i.e. :attr:`autoencoder_evaluations` entries will be ``None``).
+    is performed (i.e. :attr:`CompressionModel.autoencoder_evaluations` entries will be
+    ``None``).
 
     Important
     ---------
@@ -745,29 +742,28 @@ class CompressionModel:
 
     See Also
     --------
-    :attr:`CompressionModel.training_size` : Controls the initial train split.
+    :attr:`CompressionModel.CompressionModel.training_size` : Controls the initial
+    train split.
     """
-
     autoencoder_models: list[AutoencoderModels]
     """List of autoencoder populated during :meth:`~CompressionModel.fit`.
 
-    Each :class:`AutoencoderModels` instance is built from :attr:`layer_sizes`
-    and trained on the corresponding chunk of the training data. Empty list
-    before fitting.
+    Each :class:`AutoencoderModels` instance is built from
+    :attr:`CompressionModel.layer_sizes` and trained on the corresponding chunk of
+    the training data. Empty list before fitting.
 
     See Also
     --------
     :attr:`CompressionModel.n_chunks` : Number of autoencoders to be trained.
     :meth:`CompressionModel.fit` : Where the models are instantiated and trained.
     """
-
     autoencoder_evaluations: list
     """List of evaluation results for each autoencoder.
 
     Each entry is a dict mapping the loss name to its evaluation score (e.g.
     ``{"mse": 0.042}``), computed on the evaluation set after training. Entries
-    are ``None`` for each chunks if :attr:`validation_size` is ``1.0``. Empty
-    list before fitting.
+    are ``None`` for each chunks if :attr:`CompressionModel.validation_size` is ``1.0``.
+    Empty list before fitting.
 
     See Also
     --------
@@ -776,7 +772,6 @@ class CompressionModel:
     :attr:`CompressionModel.loss` : The loss function used for evaluation.
     :meth:`CompressionModel.fit` : Where evaluation is performed.
     """
-
     autoencoder_fits: list
     """Training histories for each autoencoder.
 
@@ -795,9 +790,10 @@ class CompressionModel:
         """Layer dimensions (shared across all autoencoders).
 
         The first element defines the input/output dimension of each autoencoder
-        and determines how the data is chunked (see :attr:`chunk_size`). The last
-        element is the latent dimension. Elements in between define the encoding
-        layers; the decoder mirrors them in reverse.
+        and determines how the data is chunked (see
+        :attr:`CompressionModel.chunk_size`). The last element is the latent dimension.
+        Elements in between define the encoding layers; the decoder mirrors them in
+        reverse.
 
         For example, ``[28, 14, 7, 3]`` produces:
 
@@ -834,7 +830,6 @@ class CompressionModel:
         --------
         :attr:`CompressionModel.chunk_size` : Derived from ``layer_sizes[0]``.
         :class:`AutoencoderModels` : Consumes ``layer_sizes`` to build each autoencoder.
-
         """
         return self._layer_sizes
 
@@ -923,8 +918,12 @@ class CompressionModel:
         """Initialise from a training data frame.
 
         TODO
-        """
 
+        A dictionary mapping each allele to its encoding vector. If None, a one-hot
+        encoding map is built automatically from the unique alleles found in
+        ``geno_array`` using :func:`build_one_hot_encoding_map` excluding
+        ``missing_values``
+        """
         if training_dataframe.empty:
             raise ValueError(
                 "`training_dataframe` is empty. Provide a DataFrame with at least "
@@ -939,6 +938,8 @@ class CompressionModel:
         geno_array = training_dataframe.to_numpy()
 
         if encoding_map is None:
+            # even if encode_snp_array can fallback to build_one_hot_encoding_map
+            # we need to keep the actual `encoding_map` in the instance.
             encoding_map = build_one_hot_encoding_map(geno_array, missing_values)
 
         training_encoded_geno_array = encode_snp_array(
@@ -960,20 +961,22 @@ class CompressionModel:
     ):
         """Fit the autoencoders (one per data chunk).
 
-        Splits the training data into chunks of size :attr:`chunk_size`, builds
-        one :class:`AutoencoderModels` per chunk, and trains each autoencoder on
-        its corresponding chunk. Training and validation splits are drawn from the
-        same rows across all chunks.
+        Splits the training data into chunks of size
+        :attr:`CompressionModel.chunk_size`, builds one :class:`AutoencoderModels` per
+        chunk, and trains each autoencoder on its corresponding chunk.
+        Training and validation splits are drawn from the same rows across all chunks.
 
-        Populates :attr:`autoencoder_models`, :attr:`autoencoder_fits`, and
-        :attr:`autoencoder_evaluations`.
+        Populates :attr:`CompressionModel.autoencoder_models`,
+        :attr:`CompressionModel.autoencoder_fits`, and
+        :attr:`CompressionModel.autoencoder_evaluations`.
 
         Parameters
         ----------
         seed :
-            Random seed for the train/test split. Overrides :attr:`seed` if
-            provided. If neither is set, a random seed is generated and stored
-            in :attr:`seed`. Only affects data splitting, not weight initialisation.
+            Random seed for the train/test split. Overrides
+            :attr:`CompressionModel.seed` if provided. If neither is set, a random seed
+            is generated and stored in :attr:`CompressionModel.seed`. Only affects data
+            splitting, not weight initialisation.
 
         Important
         ---------
@@ -983,10 +986,9 @@ class CompressionModel:
         Raises
         ------
         RuntimeError
-            If :attr:`training_encoded_geno_array` is ``None``.
+            If :attr:`CompressionModel.training_encoded_geno_array` is ``None``.
         RuntimeError
-            If :attr:`layer_sizes` is not set.
-
+            If :attr:`CompressionModel.layer_sizes` is not set.
         """
         if self.training_encoded_geno_array is None:
             raise RuntimeError("No training data available.")
@@ -1079,11 +1081,11 @@ class CompressionModel:
         Raises
         ------
         RuntimeError
-            If the model has not been fitted yet (i.e. ``self.is_fitted`` is ``False``).
+            If the model has not been fitted yet (i.e.
+            :attr:`CompressionModel.is_fitted` is ``False``).
         ValueError
             If ``encoded_geno_array`` has a different number of columns than
             the training data.
-
         """
         if not self.is_fitted:
             raise RuntimeError("Model is not fitted.")

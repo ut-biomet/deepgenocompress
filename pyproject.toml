@@ -36,6 +36,7 @@ lint_lsp_formatter = [
     "black>=26.3.1",
     "isort>=8.0.1",
     "ruff>=0.14.6",
+    "docformatter>=1.7.8",
 ]
 doc = [
     "sphinx>=9.0.4",
@@ -99,5 +100,11 @@ extend-select = [
   "ERA",
 ]
 
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
 [tool.pyright]
 "typeCheckingMode" = "basic"
+
+[tool.docformatter]
+black = true

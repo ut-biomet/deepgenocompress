@@ -1,7 +1,7 @@
 """Deep learning toolkit for compressed genomic prediction.
 
-Provides tools to encode raw genotype data, compress it using autoencoders,
-and build predictive models from their compressed representations.
+Provides tools to encode raw genotype data, compress it using autoencoders, and build
+predictive models from their compressed representations.
 """
 
 import logging
