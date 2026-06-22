@@ -2,8 +2,6 @@
 
 > This repository continues the work made on https://github.com/tanzilamohita/ConvCGP by
 > @tanzilamohita.
->
-> **Documentation: https://ut-biomet.github.io/DeepCGP/**
 
 ### Tanzila Raihan, Chyon Hae Kim, Hiroyuki Shimono, Akio Kimura, Hiroyoshi Iwata\*
 
@@ -24,6 +22,12 @@ Availability of Rice Datasets: You can access the dataset from
 
 Availability of Maize Datasets: You can access the dataset from
 [here](https://iagr.genomics.cn/CropGS/#/).
+
+## Documentation
+
+Online documentation is available at https://ut-biomet.github.io/DeepCGP/. It contains a
+page with a
+[usage example](https://ut-biomet.github.io/DeepCGP/quarto_pages/outputs/example.html).
 
 ## Development environment
 
