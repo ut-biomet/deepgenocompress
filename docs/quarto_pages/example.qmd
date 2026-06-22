@@ -47,8 +47,8 @@ For this example we will use a **small** data set from a csv file storing SNP
 markers as strings: `A`, `C`, `T`, `G` with one sample per homozygous sample and
 one marker per column.
 
+<!-- # TODO: better path maybe add those example data in the package. -->
 ```{python}
-# TODO: better path maybe add those example data in the package.
 data = pd.read_csv(f"../../tests/fixtures/X.csv", index_col=0)
 print(data)
 ```
@@ -69,7 +69,7 @@ data_array = data.to_numpy()
 encoding_map = deepcgp.build_one_hot_encoding_map(geno_array = data_array)
 ```
 
-The encoding map is a dictionary is:
+The encoding map dictionary is:
 
 ```{python}
 pprint(encoding_map)
@@ -111,6 +111,7 @@ Here we initialise the compression model by specifying:
 ```{python}
 cm = deepcgp.CompressionModel(
     training_encoded_geno_array=encoded_data,
+    encoding_map=encoding_map,
     layer_sizes=[14, 7, 3],
     seed=42,
     batch_size=52,
@@ -146,6 +147,30 @@ autoencoders to have an input size of `{python} n_l` which make
 print(cm.n_chunks)
 ```
 
+### Shortcut: initialising from a DataFrame
+
+If you don't need to inspect or reuse the encoding map and encoded array, the
+`CompressionModel.from_dataframe` classmethod wraps all of the above steps in one call:
+
+```{python}
+#| eval: false
+cm = deepcgp.CompressionModel.from_dataframe(
+    training_dataframe=data,
+    # encoding_map=None, # to pass a custom encoding_map
+    layer_sizes=[14, 7, 3],
+    seed=42,
+    batch_size=52,
+    learning_rate=0.001,
+    epochs=200,
+)
+```
+
+This is equivalent to the manual `build_one_hot_encoding_map()`, `encode_snp_array()`,
+`CompressionModel()` sequence shown above. If not provided, the encoding map is built
+automatically from the DataFrame and will be stored on the model instance
+(accessible via `cm.encoding_map`) if you need it later.
+
+
 ### Fit the autoencoders
 
 The compression model is initialised but not yet fitted. This is done with
@@ -170,6 +195,10 @@ compressed_array = cm.compress(encoded_geno_array=encoded_data)
 
 The compressed data have `{python} compressed_array.shape[0]` lines,
 **`{python} compressed_array.shape[1]` columns**.
+
+It is also possible compress raw DataFrame directly with the `compress_dataframe`
+method: `cm.compress_dataframe(geno_dataframe=data)`. The method will automatically
+encode the data before the compression using `cm.encoding_map`.
 
 ### Summary
 
