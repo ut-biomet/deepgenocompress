@@ -443,8 +443,8 @@ class TestEncodeSnpArray:
         with pytest.warns(
             UserWarning,
             match=(
-                "The encoded array contains only zeros. This may indicate that all values "
-                "in geno_array are missing or not present in encoding_map."
+                "The encoded array contains only zeros. This may indicate that all "
+                "values in geno_array are missing or not present in encoding_map."
             ),
         ):
             result = encode_snp_array(geno_unkown, encoding_map=basic_encoding_map)
@@ -460,8 +460,8 @@ class TestEncodeSnpArray:
         with pytest.warns(
             UserWarning,
             match=(
-                "The encoded array contains only zeros. This may indicate that all values "
-                "in geno_array are missing or not present in encoding_map."
+                "The encoded array contains only zeros. This may indicate that all "
+                "values in geno_array are missing or not present in encoding_map."
             ),
         ):
             result = encode_snp_array(geno_unkown, encoding_map=basic_encoding_map)
@@ -477,8 +477,8 @@ class TestEncodeSnpArray:
         with pytest.warns(
             UserWarning,
             match=(
-                "The encoded array contains only zeros. This may indicate that all values "
-                "in geno_array are missing or not present in encoding_map."
+                "The encoded array contains only zeros. This may indicate that all "
+                "values in geno_array are missing or not present in encoding_map."
             ),
         ):
             result = encode_snp_array(geno_empty, encoding_map=basic_encoding_map)
@@ -598,8 +598,8 @@ class TestEncodeSnpArray:
         with pytest.warns(
             UserWarning,
             match=(
-                "The encoded array contains only zeros. This may indicate that all values "
-                "in geno_array are missing or not present in encoding_map."
+                "The encoded array contains only zeros. This may indicate that all "
+                "values in geno_array are missing or not present in encoding_map."
             ),
         ):
             result = encode_snp_array(geno, encoding_map=encoding_map)

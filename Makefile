@@ -20,8 +20,8 @@ format-check:
 	git ls-files -- "*.nix" | xargs nixfmt --check
 
 python_checks:
-	git ls-files -- "*.py" | xargs ruff check
-	git ls-files -- "*.py" | xargs basedpyright
+	ruff check
+	basedpyright
 
 tests:
 	pytest -v
