@@ -69,7 +69,7 @@ html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 
 html_theme_options = {
-    "show_toc_level": 2,
+    "show_toc_level": 3,
     "use_sidenotes": True,
     "repository_url": "https://github.com/ut-biomet/DeepCGP",
     "use_repository_button": True,

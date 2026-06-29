@@ -21,7 +21,8 @@ import logging
 import random
 import warnings
 from collections.abc import Collection, Mapping
-from typing import Any
+from enum import StrEnum, auto
+from typing import Any, ClassVar, TypedDict
 
 import numpy as np
 import pandas as pd
@@ -32,6 +33,8 @@ from keras.losses import Loss
 from keras.optimizers import Adam
 from numpy.typing import ArrayLike, NDArray
 from sklearn.model_selection import train_test_split
+
+from deepcgp._base_exceptions import DeepcgpError, _type_fullname
 
 from .data_processing import (
     _validate_encoding_map,
@@ -64,6 +67,88 @@ def _default_decoder_activation_functions(
     return _default_encoder_activation_functions(encoder_layers_sizes)
 
 
+class LayerSizesConfigurationError(DeepcgpError):
+    """Raised when layer sizes configuration is not valid.
+
+    Instances are constructed with a :class:`ReasonCode` identifying which validation
+    failed, plus an ``extra`` mapping of contextual values.
+    """
+
+    class ReasonCode(StrEnum):
+        """Possible invalid reasons."""
+
+        def __repr__(self) -> str:
+            return self.name
+
+        INVALID_TYPE = auto()
+        """Provided layer sizes is not a :class:`list` or :class:`tuple`."""
+        TOO_FEW_LAYERS = auto()
+        """Provided layer sizes have less than 2 elements."""
+        INVALID_LAYER_TYPE = auto()
+        """Provided layer sizes values are not :class:`int`."""
+    _MESSAGES: ClassVar[dict["LayerSizesConfigurationError.ReasonCode", str]] = {
+        ReasonCode.INVALID_TYPE: (
+            "`layer_sizes` must be a list or tuple, got a {provided_type_str}."
+        ),
+        ReasonCode.TOO_FEW_LAYERS: (
+            "`layer_sizes` length must be at least 2, got {layer_sizes_length}."
+        ),
+        ReasonCode.INVALID_LAYER_TYPE: (
+            "`layer_sizes` must be a list or tuple of int, got "
+            "`{provided_element_type_str}` at index {offending_index}."
+        ),
+    }
+
+    class _Extra(TypedDict, total=False):
+        reason: "LayerSizesConfigurationError.ReasonCode"
+        provided_type: type
+        provided_layer_sizes: list | tuple
+        provided_element_type: type
+        offending_index: int
+
+    extra: "_Extra | dict[str, Any]"
+    """Extra information related to the error.
+
+    :class:`dict` with possible keys depending on the :attr:`reason`:
+        - ``reason``: :class:`ReasonCode`
+        - ``provided_type``: :class:`type`
+        - ``provided_layer_sizes``: :class:`list` or  :class:`tuple`
+        - ``provided_element_type``: :class:`type`
+        - ``offending_index``: :class:`int`
+    """
+
+    reason: ReasonCode
+    """Which validation rule layer sizes failed."""
+
+    def __init__(
+        self,
+        reason: "LayerSizesConfigurationError.ReasonCode",
+        extra: "LayerSizesConfigurationError._Extra | None" = None,
+    ):
+        self.reason = reason
+        extra = extra or {}
+        str_extra = {
+            "provided_type_str": (
+                _type_fullname(extra["provided_type"])
+                if "provided_type" in extra
+                else None
+            ),
+            "provided_element_type_str": (
+                _type_fullname(extra["provided_element_type"])
+                if "provided_element_type" in extra
+                else None
+            ),
+            "layer_sizes_length": (
+                len(extra["provided_layer_sizes"])
+                if "provided_layer_sizes" in extra
+                else None
+            ),
+        }
+        str_extra = {k: v for k, v in str_extra.items() if v is not None}
+        message = self._MESSAGES[reason].format(**extra, **str_extra)
+        super().__init__(message=message, extra={"reason": reason, **extra})
+
+
 def _check_layer_sizes(layer_sizes):
     """Check layers_sizes's type and value.
 
@@ -75,26 +160,31 @@ def _check_layer_sizes(layer_sizes):
 
     Raises
     ------
-    TypeError
-        If ``layer_sizes`` is not a list or tuple.
-    ValueError
-        If ``layer_sizes`` has a length lower than 2.
-    ValueError
-        If ``layer_sizes``'s values are not integers.
+    LayerSizesConfigurationError
+        If ``layer_sizes`` is invalid:
+        - not a list or tuple.
+        - has a length lower than 2.
+        - values are not integers.
     """
     if not isinstance(layer_sizes, (list, tuple)):
-        raise TypeError(
-            "layer_sizes must be a list, or tuple of int got " f"`{type(layer_sizes)}`"
+        raise LayerSizesConfigurationError(
+            reason=LayerSizesConfigurationError.ReasonCode.INVALID_TYPE,
+            extra={"provided_type": type(layer_sizes)},
         )
+
     if len(layer_sizes) < 2:
-        raise ValueError(
-            "layer_sizes length must be greater than 2, got " f"`{len(layer_sizes)=}`"
+        raise LayerSizesConfigurationError(
+            reason=LayerSizesConfigurationError.ReasonCode.TOO_FEW_LAYERS,
+            extra={"provided_layer_sizes": layer_sizes},
         )
     for i, ls in enumerate(layer_sizes):
         if not isinstance(ls, int):
-            raise ValueError(
-                "layer_sizes must be a list, or tuple of int got "
-                f"`{type(layer_sizes[i])}` for index layers_sizes[{i}]."
+            raise LayerSizesConfigurationError(
+                reason=LayerSizesConfigurationError.ReasonCode.INVALID_LAYER_TYPE,
+                extra={
+                    "provided_element_type": type(layer_sizes[i]),
+                    "offending_index": i,
+                },
             )
     if layer_sizes[-1] >= layer_sizes[0]:
         warnings.warn(
@@ -135,12 +225,11 @@ class AutoencoderModels:
 
     Raises
     ------
-    TypeError
-        If ``layer_sizes`` is not a list or tuple.
-    ValueError
-        If ``layer_sizes`` has a length lower than 2.
-    ValueError
-        If ``layer_sizes``'s values are not integers.
+    LayerSizesConfigurationError
+        If ``layer_sizes`` is invalid:
+        - not a list or tuple.
+        - has a length lower than 2.
+        - values are not integers.
 
     Examples
     --------
@@ -229,6 +318,188 @@ class AutoencoderModels:
         )
 
 
+class ModelStateError(DeepcgpError):
+    """Raised when model is not correctly prepared for the requested operation.
+
+    Instances are constructed with a :class:`ReasonCode` identifying which state
+    prediction was violated.
+    """
+
+    class ReasonCode(StrEnum):
+        """Possible invalid reasons."""
+
+        def __repr__(self) -> str:
+            return self.name
+
+        NO_TRAINING_DATA = auto()
+        """:attr:`CompressionModel.training_encoded_geno_array` is ``None``."""
+        NO_LAYER_SIZES = auto()
+        """:attr:`CompressionModel.layer_sizes` is not set, so the autoencoder
+        architecture and chunking cannot be determined."""
+        MODEL_NOT_FITTED = auto()
+        """:attr:`CompressionModel.is_fitted` is ``False``, so the autoencoders are not
+        ready to compress data."""
+    _MESSAGES: ClassVar[dict["ModelStateError.ReasonCode", str]] = {
+        ReasonCode.NO_TRAINING_DATA: "No training data available.",
+        ReasonCode.NO_LAYER_SIZES: "`layer_sizes` is not set.",
+        ReasonCode.MODEL_NOT_FITTED: "Model is not fitted.",
+    }
+
+    class _Extra(TypedDict, total=False):
+        reason: "ModelStateError.ReasonCode"
+
+    extra: "_Extra | dict[str, Any]"
+    """Extra information related to the error.
+
+    :class:`dict` with possible keys depending on the :attr:`reason`:
+        - ``reason``: :class:`ReasonCode`
+    """
+
+    reason: ReasonCode
+    """Which state precondition was violated."""
+
+    def __init__(
+        self,
+        reason: "ModelStateError.ReasonCode",
+        extra: "ModelStateError._Extra | None" = None,
+    ):
+        self.reason = reason
+        extra = extra or {}
+        message = self._MESSAGES[reason]
+        super().__init__(message=message, extra={"reason": reason, **extra})
+
+
+class IncompatibleDataError(DeepcgpError):
+    """Raised when data to compress are incompatible with the model.
+
+    Instances are constructed with a :class:`ReasonCode` identifying which compatibility
+    check failed, plus an ``extra`` mapping of contextual values
+    """
+
+    class ReasonCode(StrEnum):
+        """Possible invalid reasons."""
+
+        def __repr__(self) -> str:
+            return self.name
+
+        INVALID_NUMBER_OF_COLUMNS = auto()
+        """The encoded data to compress does not have the same number of columns as the
+        encoded training data."""
+        INVALID_COLUMN_INDEX = auto()
+        """The provided DataFrame's columns do not match the training markers index."""
+    _MESSAGES: ClassVar[dict["IncompatibleDataError.ReasonCode", str]] = {
+        ReasonCode.INVALID_NUMBER_OF_COLUMNS: (
+            "Incompatible data. Expected {encoded_training_data_ncols} columns "
+            "(from encoded training data) but provided encoded data have "
+            "{encoded_provided_data_ncols} columns. Ensure the input is encoded with "
+            "the same encoding map and contains the same markers as the training data."
+        ),
+        ReasonCode.INVALID_COLUMN_INDEX: (
+            "Incompatible data. Provided DataFrame columns do not match training "
+            "markers index."
+        ),
+    }
+
+    class _Extra(TypedDict, total=False):
+        encoded_provided_data_ncols: int
+        encoded_training_data_ncols: int
+        training_data_index: pd.Index
+        provided_data_index: pd.Index
+
+    extra: "_Extra | dict[str, Any]"
+    """Extra information related to the error.
+
+    :class:`dict` with possible keys depending on the :attr:`reason`:
+        - ``reason``: :class:`ReasonCode`
+        - ``encoded_provided_data_ncols``: :class:`int`
+        - ``encoded_training_data_ncols``: :class:`int`
+        - ``training_data_index``: :class:`pd.Index`
+        - ``provided_data_index``: :class:`pd.Index`
+    """
+    reason: ReasonCode
+    """Which compatibility check failed."""
+
+    def __init__(
+        self,
+        reason: "IncompatibleDataError.ReasonCode",
+        extra: "IncompatibleDataError._Extra | None" = None,
+    ):
+        self.reason = reason
+        extra = extra or {}
+        message = self._MESSAGES[reason].format(**extra)
+        super().__init__(message=message, extra={"reason": reason, **extra})
+
+
+class CompressionModelConfigurationError(DeepcgpError):
+    """Raised when a :class:`CompressionModel` is configured with incompatible inputs.
+
+    Instances are constructed with a :class:`ReasonCode` identifying which configuration
+    check failed, plus an ``extra`` mapping of contextual values.
+    """
+
+    class ReasonCode(StrEnum):
+        """Possible invalid reasons."""
+
+        def __repr__(self) -> str:
+            return self.name
+
+        EMPTY_DATAFRAME = auto()
+        """The training DataFrame is empty."""
+        MARKER_INDEX_SIZE_MISMATCH = auto()
+        """Marker index length missmatch training data size."""
+    _MESSAGES: ClassVar[dict["CompressionModelConfigurationError.ReasonCode", str]] = {
+        ReasonCode.EMPTY_DATAFRAME: (
+            "`training_dataframe` is empty. Provide a DataFrame compatible with "
+            "at least one row and one column."
+        ),
+        ReasonCode.MARKER_INDEX_SIZE_MISMATCH: (
+            "Marker index length missmatch training data size. "
+            "Marker index has {markers_index_length} markers, but "
+            "the encoded training genotype array implies {expected_n_markers} markers "
+            "({encoded_training_data_ncols} columns / encoding size {encoding_size})."
+        ),
+    }
+
+    class _Extra(TypedDict, total=False):
+        reason: "CompressionModelConfigurationError.ReasonCode"
+        encoded_training_data_ncols: int
+        encoding_size: int
+        markers_index: pd.Index
+
+    extra: "_Extra | dict[str, Any]"
+    """Extra information related to the error.
+
+    :class:`dict` with possible keys depending on the :attr:`reason`:
+        - ``reason``: :class:`ReasonCode`
+        - ``encoded_training_data_ncols``: :class:`int`
+        - ``encoding_size``: :class:`int`
+        - ``markers_index``: :class:`pd.Index`
+    """
+    reason: ReasonCode
+    """Which configuration check failed."""
+
+    def __init__(
+        self,
+        reason: "CompressionModelConfigurationError.ReasonCode",
+        extra: "CompressionModelConfigurationError._Extra | None" = None,
+    ):
+        self.reason = reason
+        extra = extra or {}
+        str_extra = {
+            "markers_index_length": (
+                len(extra["markers_index"]) if "markers_index" in extra else None
+            ),
+            "expected_n_markers": (
+                int(extra["encoded_training_data_ncols"] / extra["encoding_size"])
+                if ("encoded_training_data_ncols" in extra and "encoding_size" in extra)
+                else None
+            ),
+        }
+        str_extra = {k: v for k, v in str_extra.items() if v is not None}
+        message = self._MESSAGES[reason].format(**extra, **str_extra)
+        super().__init__(message=message, extra={"reason": reason, **extra})
+
+
 def _check_marker_index_size_compatibility(
     markers_index: pd.Index,
     n_encoded_cols: int,
@@ -253,20 +524,20 @@ def _check_marker_index_size_compatibility(
 
     Raises
     ------
-    ValueError
+    CompressionModelConfigurationError
         If ``len(markers_index) != n_encoded_cols / encoding_size``.
     """
     # Note: could be slightly improve if encoding_size is not available
     # by checking n_encoded_cols is divisible by len(markers_index)
     expected_n_markers = n_encoded_cols / encoding_size
     if len(markers_index) != expected_n_markers:
-        raise ValueError(
-            "Marker index length missmatch training data size: "
-            f"len(training_markers_index) = {len(markers_index)}, "
-            f"encoded geno array have {n_encoded_cols} columns with an "
-            f"encoding size of {encoding_size}. "
-            f"({len(markers_index)} != {n_encoded_cols} / {encoding_size} "
-            f"= {expected_n_markers})."
+        raise CompressionModelConfigurationError(
+            reason=CompressionModelConfigurationError.ReasonCode.MARKER_INDEX_SIZE_MISMATCH,
+            extra={
+                "encoded_training_data_ncols": n_encoded_cols,
+                "encoding_size": encoding_size,
+                "markers_index": markers_index,
+            },
         )
 
 
@@ -458,6 +729,12 @@ class CompressionModel:
         Proportion or absolute number of the remaining samples used for
         validation; the rest form the evaluation set. See
         :attr:`CompressionModel.validation_size`.
+
+    Raises
+    ------
+    LayerSizesConfigurationError
+    InvalidEncodingMapError
+    CompressionModelConfigurationError
     """
 
     # TODO:
@@ -808,10 +1085,10 @@ class CompressionModel:
 
         Raises
         ------
-        TypeError
-            If ``layer_sizes`` is not a list or tuple.
-        ValueError
-            If ``layer_sizes`` has fewer than 2 elements or contains non-integer values.
+        LayerSizesConfigurationError
+            If ``layer_sizes`` is not valid:
+              - a list or tuple.
+              - has fewer than 2 elements or contains non-integer values.
 
         Warns
         -----
@@ -948,25 +1225,28 @@ class CompressionModel:
 
         Raises
         ------
-        ValueError
+        CompressionModelConfigurationError
             If ``training_dataframe`` is empty.
-        ValueError
+        TypeError
             If ``training_encoded_geno_array`` is passed as a keyword argument.
+        InvalidEncodingMapError
+            If the ``encoding_map`` is invalid (see :func:`encode_snp_array`)
+        LayerSizesConfigurationError
+            If the layer sizes are invalid
 
         See Also
         --------
         :func:`build_one_hot_encoding_map` : Builds the default encoding map.
         :func:`encode_snp_array` : Encodes the raw genotype array.
         """
-        if training_dataframe.empty:
-            raise ValueError(
-                "`training_dataframe` is empty. Provide a DataFrame with at least "
-                "one row and one column."
-            )
         if "training_encoded_geno_array" in kwargs:
-            raise ValueError(
+            raise TypeError(
                 "`training_encoded_geno_array` cannot be passed as a keyword argument "
-                "to from_dataframe(); it is derived from `training_dataframe`."
+                "it is derived from `training_dataframe`."
+            )
+        if training_dataframe.empty:
+            raise CompressionModelConfigurationError(
+                reason=CompressionModelConfigurationError.ReasonCode.EMPTY_DATAFRAME
             )
 
         geno_array = training_dataframe.to_numpy()
@@ -1019,16 +1299,15 @@ class CompressionModel:
 
         Raises
         ------
-        RuntimeError
-            If :attr:`CompressionModel.training_encoded_geno_array` is ``None``.
-        RuntimeError
-            If :attr:`CompressionModel.layer_sizes` is not set.
+        ModelStateError
+            - If :attr:`CompressionModel.training_encoded_geno_array` is ``None``.
+            - If :attr:`CompressionModel.layer_sizes` is not set.
         """
         if self.training_encoded_geno_array is None:
-            raise RuntimeError("No training data available.")
+            raise ModelStateError(reason=ModelStateError.ReasonCode.NO_TRAINING_DATA)
 
         if not self.layer_sizes:
-            raise RuntimeError("layer_sizes is not set.")
+            raise ModelStateError(reason=ModelStateError.ReasonCode.NO_LAYER_SIZES)
 
         self.autoencoder_models = [
             AutoencoderModels(self.layer_sizes) for _ in range(self.n_chunks)
@@ -1114,21 +1393,23 @@ class CompressionModel:
 
         Raises
         ------
-        RuntimeError
+        ModelStateError
             If the model has not been fitted yet (i.e.
             :attr:`CompressionModel.is_fitted` is ``False``).
-        ValueError
+        IncompatibleDataError
             If ``encoded_geno_array`` has a different number of columns than
             the training data.
         """
         if not self.is_fitted:
-            raise RuntimeError("Model is not fitted.")
+            raise ModelStateError(reason=ModelStateError.ReasonCode.MODEL_NOT_FITTED)
 
         if encoded_geno_array.shape[1] != self._n_col_train:
-            raise ValueError(
-                f"Incompatible data. Provided data have a different number of columns "
-                f"({encoded_geno_array.shape[1]}) than the training data "
-                f"({self._n_col_train})"
+            raise IncompatibleDataError(
+                reason=IncompatibleDataError.ReasonCode.INVALID_NUMBER_OF_COLUMNS,
+                extra={
+                    "encoded_provided_data_ncols": encoded_geno_array.shape[1],
+                    "encoded_training_data_ncols": self._n_col_train,
+                },
             )
 
         data_splits = _split_data(
@@ -1196,22 +1477,26 @@ class CompressionModel:
 
         Raises
         ------
-        RuntimeError
+        ModelStateError
             If the model has not been fitted yet (i.e.
             :attr:`CompressionModel.is_fitted` is ``False``).
-        ValueError
-            If the set of ``geno_dataframe``'s columns index is different from
-            the one from the training data (i.e.
-            :attr:`CompressionModel.training_markers_index`)
-        ValueError
+        IncompatibleDataError
+            - If the set of ``geno_dataframe``'s columns index is different from
+              the one from the training data (i.e.
+              :attr:`CompressionModel.training_markers_index`)
             If ``geno_dataframe`` has a different number of markers than
             the training data.
+        InvalidEncodingMapError
+            If the ``encoding_map`` is invalid (see :func:`encode_snp_array`)
         """
         if self.training_markers_index is not None:
             if set(self.training_markers_index) != set(geno_dataframe.columns):
-                raise ValueError(
-                    "Incompatible data. Provided data have different column index "
-                    "than the training data."
+                raise IncompatibleDataError(
+                    reason=IncompatibleDataError.ReasonCode.INVALID_COLUMN_INDEX,
+                    extra={
+                        "provided_data_index": geno_dataframe.columns,
+                        "training_data_index": self.training_markers_index,
+                    },
                 )
             geno_dataframe = geno_dataframe.loc[:, self.training_markers_index]
 
