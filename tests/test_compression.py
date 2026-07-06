@@ -1,8 +1,10 @@
+import copy
 import re
 from dataclasses import dataclass
 from unittest.mock import call
 
 import numpy as np
+import pandas as pd
 import pytest
 from keras import Model
 from keras.callbacks import EarlyStopping, History
@@ -12,10 +14,15 @@ from sklearn.model_selection import train_test_split
 from deepcgp.compression import (
     AutoencoderModels,
     CompressionModel,
-    _check_layer_sizes_and_data_compatibility,
+    _check_layer_size_and_encoded_data_size,
+    _check_layer_size_and_encoding_compatibility,
     _split_data,
 )
-from deepcgp.data_processing import build_one_hot_encoding_map, encode_snp_array
+from deepcgp.data_processing import (
+    _validate_encoding_map,
+    build_one_hot_encoding_map,
+    encode_snp_array,
+)
 
 LAYER_SIZES_CASES = [
     pytest.param([32, 16, 8, 4], id="2-encoding-layers"),
@@ -35,7 +42,7 @@ def basic_autoencoder_models(layer_sizes):
 
 
 class TestAutoencoderModels:
-    """Tests for `AutoencoderModels` class"""
+    """Tests for `AutoencoderModels` class."""
 
     def test_both_are_keras_models(self, basic_autoencoder_models):
         assert isinstance(basic_autoencoder_models.autoencoder, Model)
@@ -225,6 +232,7 @@ class TestAutoencoderModels:
 @dataclass
 class TrainingDataFixture:
     array: np.ndarray
+    dataframe: pd.DataFrame
     encoded_array: np.ndarray
     encoding_map: dict
     layer_sizes: list
@@ -232,17 +240,21 @@ class TrainingDataFixture:
 
 @pytest.fixture(scope="module")
 def basic_training_data():
-    ga = np.array(
+    gd = pd.DataFrame(
         [
             ["G", "A", "T", "T", "A", "C"],
             ["A", "C", "A", "T", "T", "A"],
             ["T", "A", "G", "G", "T", "C"],
-        ]
+        ],
+        index=["ind_1", "ind_2", "ind_3"],
+        columns=["snp_1", "snp_2", "snp_3", "snp_4", "snp_5", "snp_6"],
     )
+    ga = gd.to_numpy()
 
     encoding_map = build_one_hot_encoding_map(ga)
     return TrainingDataFixture(
         array=ga,
+        dataframe=gd,
         encoded_array=encode_snp_array(ga),
         encoding_map=encoding_map,
         layer_sizes=[8, 4, 2],
@@ -251,21 +263,54 @@ def basic_training_data():
 
 @pytest.fixture(scope="module")
 def training_data_requiring_padding():
-    ga = np.array(
+    gd = pd.DataFrame(
         [
             ["G", "A", "T", "T", "A", "C"],
             ["A", "C", "A", "T", "T", "A"],
             ["T", "A", "G", "G", "T", "C"],
-        ]
+        ],
+        index=["ind_1", "ind_2", "ind_3"],
+        columns=["snp_1", "snp_2", "snp_3", "snp_4", "snp_5", "snp_6"],
     )
+    ga = gd.to_numpy()
 
     encoding_map = build_one_hot_encoding_map(ga)
     return TrainingDataFixture(
         array=ga,
+        dataframe=gd,
         encoded_array=encode_snp_array(ga),
         encoding_map=encoding_map,
         layer_sizes=[16, 8, 2],  # 16 = 4 alleles * encoding_size (=4)
     )
+
+
+@pytest.fixture(scope="module")
+def _initialised_compression_model(basic_training_data: TrainingDataFixture):
+    return CompressionModel.from_dataframe(
+        training_dataframe=basic_training_data.dataframe,
+        layer_sizes=basic_training_data.layer_sizes,
+    )
+
+
+@pytest.fixture(scope="module")
+def _fitted_compression_model(_initialised_compression_model: CompressionModel):
+    cm = copy.deepcopy(_initialised_compression_model)
+    cm.fit()
+    return cm
+
+
+@pytest.fixture
+def initialised_compression_model(_initialised_compression_model: CompressionModel):
+    return copy.deepcopy(_initialised_compression_model)
+
+
+@pytest.fixture
+def fitted_compression_model(_fitted_compression_model: CompressionModel):
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"__array__ implementation doesn't accept a copy keyword",
+    ):  # Keras doesn't accept NumPy 2.0's convention, to remove when problem solved.
+        return copy.deepcopy(_fitted_compression_model)
 
 
 @pytest.fixture
@@ -273,53 +318,25 @@ def default_compression_model():
     return CompressionModel()
 
 
-@pytest.fixture(scope="module")
-def fitted_compression_model(basic_training_data: TrainingDataFixture):
-    model = CompressionModel(
-        training_encoded_geno_array=basic_training_data.encoded_array,
-        layer_sizes=basic_training_data.layer_sizes,
-    )
-    model.fit()
-    return model
-
-
-class Test_check_layer_sizes_and_data_compatibility:
-
+class Test_check_layer_size_and_encoded_data_size:
     # valid cases
-    def test_returns_true_for_valid_n_cols_first_layer(self):
-        assert _check_layer_sizes_and_data_compatibility(100, 10) is None
+    def test_no_warn_for_valid_n_cols_first_layer(self):
+        assert _check_layer_size_and_encoded_data_size(100, 10) is None
 
-    def test_n_cols_equals_first_layer_size(self):
-        assert _check_layer_sizes_and_data_compatibility(8, 8) is None
+    def test_no_warn_for_n_cols_equals_first_layer_size(self):
+        assert _check_layer_size_and_encoded_data_size(8, 8) is None
 
-    def test_returns_true_for_valid_encoding_size_first_layer(self):
-        assert _check_layer_sizes_and_data_compatibility(100, 10, 5) is None
-
-    def test_returns_true_encoding_size_equals_first_layer(self):
-        with pytest.warns(
-            UserWarning,
-            match=r"layer_sizes\[0\]=8 is equal to `encoding_size`.",
-        ) as warn_info:
-            assert _check_layer_sizes_and_data_compatibility(64, 8, 8) is None
-
-        expected_message = (
-            "layer_sizes[0]=8 is equal to `encoding_size` "
-            "(ie. each chunk will consist of only 1 encoded allele)."
-        )
-        assert str(warn_info[0].message) == expected_message
-
-    # n_cols / first_layer_size related test error
     def test_warn_when_n_cols_is_not_divisible_by_first_layer_size(self):
         with pytest.warns(UserWarning, match="is not a divisor of n_cols"):
-            _check_layer_sizes_and_data_compatibility(10, 3)
+            _check_layer_size_and_encoded_data_size(10, 3)
 
     def test_warn_when_n_cols_is_lower_than_first_layer_size(self):
         with pytest.warns(UserWarning, match="is not a divisor of n_cols"):
-            _check_layer_sizes_and_data_compatibility(5, 10)
+            _check_layer_size_and_encoded_data_size(5, 10)
 
-    def test_warning_message_for_n_cols_first_layer_related_error(self):
+    def test_warning_message(self):
         with pytest.warns(UserWarning, match="is not a divisor of n_cols") as warn_info:
-            _check_layer_sizes_and_data_compatibility(13, 7)
+            _check_layer_size_and_encoded_data_size(13, 7)
 
         expected_message = (
             "layer_sizes[0]=7 is not a divisor of n_cols=13. "
@@ -328,18 +345,35 @@ class Test_check_layer_sizes_and_data_compatibility:
         )
         assert str(warn_info[0].message) == expected_message
 
-    # encoding_size / first_layer_size related error
+
+class Test_check_layer_size_and_encoding_compatibility:
+    def test_no_warn_for_valid_encoding_size_first_layer(self):
+        assert _check_layer_size_and_encoding_compatibility(10, 5) is None
+
+    def test_warn_when_encoding_size_equals_first_layer(self):
+        with pytest.warns(
+            UserWarning,
+            match=r"layer_sizes\[0\]=8 is equal to `encoding_size`.",
+        ) as warn_info:
+            assert _check_layer_size_and_encoding_compatibility(8, 8) is None
+
+        expected_message = (
+            "layer_sizes[0]=8 is equal to `encoding_size` "
+            "(ie. each chunk will consist of only 1 encoded allele)."
+        )
+        assert str(warn_info[0].message) == expected_message
+
     def test_warns_when_encoding_size_not_multiple_of_n_cols(self):
         with pytest.warns(UserWarning, match="is not a multiple of"):
-            _check_layer_sizes_and_data_compatibility(100, 10, 3)
+            _check_layer_size_and_encoding_compatibility(10, 3)
 
     def test_warns_when_encoding_size_larger_than_first_layer(self):
         with pytest.warns(UserWarning, match="is not a multiple of"):
-            _check_layer_sizes_and_data_compatibility(100, 10, 20)
+            _check_layer_size_and_encoding_compatibility(10, 20)
 
-    def test_warning_message_for_encoding_size_first_layer_related_error(self):
+    def test_warning_message(self):
         with pytest.warns(UserWarning, match=r"is not a multiple of") as warn_info:
-            _check_layer_sizes_and_data_compatibility(100, 10, 7)
+            _check_layer_size_and_encoding_compatibility(10, 7)
 
         expected_message = (
             "layer_sizes[0]=10 is not a multiple of encoding_size=7. "
@@ -441,7 +475,10 @@ class Test_split_data:
         )
 
 
-class TestCompressionModel_initialisation:
+class TestCompressionModel_basic_initialisation:
+    def test_can_instanciate(self):
+        CompressionModel()
+
     def test_default_parameters(self, default_compression_model):
         assert default_compression_model.training_encoded_geno_array is None
         assert default_compression_model.encoding_map is None
@@ -453,6 +490,7 @@ class TestCompressionModel_initialisation:
         assert default_compression_model.training_size == 0.4
         assert default_compression_model.validation_size == 0.5
         assert default_compression_model.layer_sizes == []
+        assert default_compression_model.training_markers_index is None
 
         assert isinstance(default_compression_model.fitting_callbacks, list)
         assert len(default_compression_model.fitting_callbacks) == 1
@@ -480,6 +518,7 @@ class TestCompressionModel_initialisation:
             seed=42,
             training_size=0.8,
             validation_size=0.2,
+            training_markers_index=basic_training_data.dataframe.columns,
         )
         assert model.training_encoded_geno_array is not None
         assert np.array_equal(
@@ -495,6 +534,10 @@ class TestCompressionModel_initialisation:
         assert model.seed == 42
         assert model.training_size == 0.8
         assert model.validation_size == 0.2
+        assert isinstance(model.training_markers_index, pd.Index)
+        assert model.training_markers_index.equals(
+            basic_training_data.dataframe.columns
+        )
 
         assert model.is_fitted is False
         assert model.autoencoder_models == []
@@ -524,9 +567,10 @@ class TestCompressionModel_initialisation:
         with pytest.raises(ValueError):
             CompressionModel(layer_sizes=bad_layer_sizes)
 
-
-class TestCompressionModel_layer_sizes_and_data_incompatibility:
-    def test_raise_at_initialisation(self, basic_training_data: TrainingDataFixture):
+    def test_warns_with_incompatible_layer_size_and_data(
+        self,
+        basic_training_data: TrainingDataFixture,
+    ):
         with pytest.warns(
             UserWarning,
             match="is not a divisor of n_cols",
@@ -536,21 +580,300 @@ class TestCompressionModel_layer_sizes_and_data_incompatibility:
                 layer_sizes=[7, 3, 1],
             )
 
-    def test_raise_when_layer_sizes_is_set_after_initialisation(
+    def test_raise_with_incompatible_index_and_training_data(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        with pytest.raises(
+            ValueError,
+            match=r"Marker index length missmatch training data size",
+        ):
+            CompressionModel(
+                training_encoded_geno_array=basic_training_data.encoded_array,
+                encoding_map=basic_training_data.encoding_map,
+                training_markers_index=["A", "B"],
+            )
+
+
+class TestCompressionModel_initialisation_from_dataframe:
+    def test_can_instanciate(self, basic_training_data: TrainingDataFixture):
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe
+        )
+        assert isinstance(cm, CompressionModel)
+
+    def test_correct_encoding_with_defaults_extra_params(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe,
+        )
+
+        expected_encoded_array = encode_snp_array(
+            basic_training_data.dataframe.to_numpy()
+        )
+        assert cm.training_encoded_geno_array is not None
+        np.testing.assert_array_equal(
+            cm.training_encoded_geno_array, expected_encoded_array
+        )
+
+    def test_correct_encoding_map_with_defaults_extra_params(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe,
+        )
+
+        assert cm.encoding_map == build_one_hot_encoding_map(
+            basic_training_data.dataframe.to_numpy()
+        )
+
+    def test_correct_encoding_with_custom_encoding_map(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        encoding_map = {
+            "A": [0.0, 1.0],
+            "C": [1.0, 0.0],
+            "T": [0.0, 1.0],
+            "G": [1.0, 0.0],
+        }
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe,
+            encoding_map=encoding_map,
+        )
+
+        expected_encoded_array = encode_snp_array(
+            basic_training_data.dataframe.to_numpy(), encoding_map=encoding_map
+        )
+        assert cm.training_encoded_geno_array is not None
+        np.testing.assert_array_equal(
+            cm.training_encoded_geno_array, expected_encoded_array
+        )
+
+    def test_correct_encoding_map_with_custom_encoding_map(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        encoding_map = {
+            "A": [0.0, 1.0],
+            "C": [1.0, 0.0],
+            "T": [0.0, 1.0],
+            "G": [1.0, 0.0],
+        }
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe,
+            encoding_map=encoding_map,
+        )
+
+        assert cm.encoding_map == encoding_map
+
+    def test_correct_encoding_with_custom_missing_values(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        missing_values = ["A", "T"]
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe,
+            missing_values=missing_values,
+        )
+
+        expected_encoded_array = encode_snp_array(
+            basic_training_data.dataframe.to_numpy(),
+            missing_values=missing_values,
+        )
+        assert cm.training_encoded_geno_array is not None
+        np.testing.assert_array_equal(
+            cm.training_encoded_geno_array, expected_encoded_array
+        )
+
+    def test_correct_encoding_map_with_custom_missing_values(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        missing_values = ["A", "T"]
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe,
+            missing_values=missing_values,
+        )
+
+        assert cm.encoding_map == build_one_hot_encoding_map(
+            geno_array=basic_training_data.dataframe.to_numpy(),
+            exclude=missing_values,
+        )
+
+    def test_parameter_propagation(self, basic_training_data: TrainingDataFixture):
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe,
+            epochs=111,
+            learning_rate=0.5,
+            validation_size=0.3,
+        )
+        assert cm.epochs == 111
+        assert cm.learning_rate == 0.5
+        assert cm.validation_size == 0.3
+
+    def test_different_dtypes_handling(self):
+        geno_data = pd.DataFrame(
+            [
+                [0, 1, 2],
+                [2, -1, 1],
+                [0, np.nan, pd.NA],
+            ],
+            index=["ind_1", "ind_2", "ind_3"],
+            columns=["snp_1", "snp_2", "snp_3"],
+        )
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=geno_data, missing_values=[-1]
+        )
+
+        # correct encoding
+        expected_encoded_array = encode_snp_array(
+            geno_data.to_numpy(), missing_values=[-1]
+        )
+        assert cm.training_encoded_geno_array is not None
+        np.testing.assert_array_equal(
+            cm.training_encoded_geno_array, expected_encoded_array
+        )
+
+        # correct encoding_map
+        assert cm.encoding_map == build_one_hot_encoding_map(
+            geno_array=geno_data.to_numpy(),
+            exclude=[-1],
+        )
+
+    def test_raise_with_empty_dataframe(self):
+        geno_data = pd.DataFrame()
+
+        with pytest.raises(
+            ValueError,
+            match=re.escape(
+                "`training_dataframe` is empty. Provide a DataFrame with at least "
+                "one row and one column."
+            ),
+        ):
+            CompressionModel.from_dataframe(training_dataframe=geno_data)
+
+    def test_training_markers_index_is_correctly_set(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        cm = CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe,
+        )
+        assert cm.training_markers_index is not None
+        assert cm.training_markers_index.equals(basic_training_data.dataframe.columns)
+
+    def test_encoding_map_is_validated(
+        self, basic_training_data: TrainingDataFixture, mocker: MockerFixture
+    ):
+        mock_validate_encoding_map = mocker.patch(
+            "deepcgp.data_processing._validate_encoding_map",
+            wraps=_validate_encoding_map,
+        )
+
+        encoding_map = {
+            "A": [0.0, 1.0],
+            "C": [1.0, 0.0],
+            "T": [0.0, 1.0],
+            "G": [1.0, 0.0],
+        }
+        missing_values = {"Z", "Y"}
+        CompressionModel.from_dataframe(
+            training_dataframe=basic_training_data.dataframe,
+            encoding_map=encoding_map,
+            missing_values=missing_values,
+        )
+        mock_validate_encoding_map.assert_called_once_with(encoding_map, missing_values)
+
+    def test_raise_error_if_training_encoded_geno_array_is_provided(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        with pytest.raises(
+            ValueError,
+            match=re.escape(
+                "`training_encoded_geno_array` cannot be passed as a keyword argument "
+                "to from_dataframe(); it is derived from `training_dataframe`."
+            ),
+        ):
+            CompressionModel.from_dataframe(
+                training_dataframe=basic_training_data.dataframe,
+                training_encoded_geno_array=None,
+            )
+
+    def test_with_only_missing_values(self, basic_training_data: TrainingDataFixture):
+        missing_values = set(basic_training_data.dataframe.to_numpy().ravel())
+        encoding_map = {  # dummy encoding_map because it cannot be empty
+            "Z": [0.0, 1.0],
+        }
+
+        with pytest.warns(
+            UserWarning,
+            match=(
+                "The encoded array contains only zeros. This may indicate that all "
+                "values in geno_array are missing or not present in encoding_map."
+            ),
+        ):
+            cm = CompressionModel.from_dataframe(
+                training_dataframe=basic_training_data.dataframe,
+                encoding_map=encoding_map,
+                missing_values=missing_values,
+            )
+
+        # correct encoding
+        with pytest.warns(
+            UserWarning,
+            match=(
+                "The encoded array contains only zeros. This may indicate that all "
+                "values in geno_array are missing or not present in encoding_map."
+            ),
+        ):
+            expected_encoded_array = encode_snp_array(
+                basic_training_data.dataframe.to_numpy(),
+                missing_values=missing_values,
+                encoding_map=encoding_map,
+            )
+        assert cm.training_encoded_geno_array is not None
+        np.testing.assert_array_equal(
+            cm.training_encoded_geno_array, expected_encoded_array
+        )
+        assert set(np.unique(cm.training_encoded_geno_array)) == {0.0}
+
+        # correct encoding_map
+        assert cm.encoding_map == encoding_map
+
+    def test_warning_when_incompatible_layer_sizes_passed_in_kwargs(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        # Just a smoke test, full validation done is done in
+        # TestCompressionModel_layer_sizes and
+        # TestCompressionModel_training_encoded_geno_array
+        with pytest.warns(UserWarning) as warnings:
+            CompressionModel.from_dataframe(
+                training_dataframe=basic_training_data.dataframe,
+                layer_sizes=[7, 3, 1],
+            )
+
+        messages = [str(w.message) for w in warnings]
+        assert any("is not a multiple of encoding_size" in m for m in messages)
+        assert any("is not a divisor of n_cols" in m for m in messages)
+
+
+class TestCompressionModel_layer_sizes:
+    def test_correct_value(self, default_compression_model: CompressionModel):
+        default_compression_model.layer_sizes = [7, 3, 1]
+        assert default_compression_model.layer_sizes == [7, 3, 1]
+
+    def test_setter_warn_when_incompatible_with_encoded_data(
         self,
         basic_training_data: TrainingDataFixture,
-        default_compression_model: CompressionModel,
     ):
-        default_compression_model.training_encoded_geno_array = (
-            basic_training_data.encoded_array
+        cm = CompressionModel(
+            training_encoded_geno_array=basic_training_data.encoded_array
         )
         with pytest.warns(
             UserWarning,
             match="is not a divisor of n_cols",
         ):
-            default_compression_model.layer_sizes = [7, 3, 1]
+            cm.layer_sizes = [7, 3, 1]
 
-    def test_raise_when_training_data_is_set_after_initialisation(
+
+class TestCompressionModel_training_encoded_geno_array:
+    def test_setter_warns_when_incompatible_with_layer_size(
         self,
         basic_training_data: TrainingDataFixture,
         default_compression_model: CompressionModel,
@@ -563,6 +886,117 @@ class TestCompressionModel_layer_sizes_and_data_incompatibility:
             default_compression_model.training_encoded_geno_array = (
                 basic_training_data.encoded_array
             )
+
+    def test_setter_raise_when_incompatible_with_marker_index(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        cm = CompressionModel(
+            encoding_map=basic_training_data.encoding_map,
+            training_markers_index=["A", "B"],
+        )
+        with pytest.raises(
+            ValueError,
+            match=r"Marker index length missmatch training data size",
+        ):
+            cm.training_encoded_geno_array = basic_training_data.encoded_array
+
+    def test_reset(self, initialised_compression_model: CompressionModel):
+        cm = initialised_compression_model
+        cm.training_encoded_geno_array = None
+
+        assert cm.training_encoded_geno_array is None
+        assert cm.n_chunks == 0
+        assert cm._n_col_train == 0
+
+
+class TestCompressionModel_training_markers_index:
+    @pytest.fixture(
+        params=[
+            pytest.param(["A", "B", "C"], id="list"),
+            pytest.param(np.array(["D", "E"]), id="np.array"),
+            pytest.param(pd.Index(["F"]), id="pd.Index"),
+        ]
+    )
+    def index_of_various_types(self, request):
+        # Note: they do not match with basic_training_data size
+        return request.param
+
+    def test_setter_accept_none(self):
+        cm = CompressionModel()
+        cm.training_markers_index = None
+        assert cm.training_markers_index is None
+
+    def test_setter_accept_different_types(self, index_of_various_types):
+        cm = CompressionModel()
+        cm.training_markers_index = index_of_various_types
+        training_markers_index = cm.training_markers_index
+        assert isinstance(training_markers_index, pd.Index)
+        assert training_markers_index.equals(pd.Index(index_of_various_types))
+
+    def test_setter_raise_if_incompatible_with_training_data(
+        self, initialised_compression_model, index_of_various_types
+    ):
+        cm = initialised_compression_model
+        with pytest.raises(
+            ValueError,
+            match=r"Marker index length missmatch training data size",
+        ):
+            cm.training_markers_index = index_of_various_types
+
+    def test_reset(self, initialised_compression_model: CompressionModel):
+        cm = initialised_compression_model
+        assert cm.training_markers_index is not None
+
+        cm.training_markers_index = None
+        assert cm.training_markers_index is None
+
+
+class TestCompressionModel_encoding_map:
+    def test_setter_validate_map(self):
+        cm = CompressionModel()
+        with pytest.raises(ValueError, match=r"`encoding_map` is empty."):
+            cm.encoding_map = {}
+
+    def test_setter_warns_with_incompatible_layer_size(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        cm = CompressionModel(
+            training_encoded_geno_array=basic_training_data.encoded_array,
+            layer_sizes=[8, 4, 2],
+        )
+        # Specify encoding map witht size 3.
+        # n_cols (24) is divisible by 3 (8 markers).
+        # but chunk_size (8) is not a multiple of 3.
+        bad_encoding_map = {"A": [1.0, 0.0, 0.0]}
+        with pytest.warns(
+            UserWarning,
+            match="is not a multiple of encoding_size",
+        ):
+            cm.encoding_map = bad_encoding_map
+
+    def test_setter_raise_with_incompatible_marker_index(
+        self, basic_training_data: TrainingDataFixture
+    ):
+        cm = CompressionModel(
+            training_encoded_geno_array=basic_training_data.encoded_array,
+            encoding_map=basic_training_data.encoding_map,
+            training_markers_index=basic_training_data.dataframe.columns,
+        )
+
+        # Encoding map with size 2.
+        # Expected markers = 24/2 = 12 != 6
+        bad_encoding_map = {"A": [0.0, 0.0]}
+        with pytest.raises(
+            ValueError, match=r"Marker index length missmatch training data size"
+        ):
+            cm.encoding_map = bad_encoding_map
+
+    def test_reset(self, initialised_compression_model: CompressionModel):
+        cm = initialised_compression_model
+        assert cm.encoding_map is not None
+
+        cm.encoding_map = None
+        assert cm.encoding_map is None
 
 
 class TestCompressionModel_fit:
@@ -865,6 +1299,220 @@ class TestCompressionModel_compress:
     ):
         result = fitted_compression_model.compress(basic_training_data.encoded_array)
         assert result.dtype == np.float32
+
+
+class TestCompressionModel_compress_dataframe:
+
+    def test_raise_when_model_is_not_fitted(
+        self,
+        default_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+    ):
+        with pytest.raises(
+            RuntimeError,
+            match=r"Model is not fitted\.",
+        ):
+            default_compression_model.compress_dataframe(basic_training_data.dataframe)
+
+    def test_raise_when_column_index_does_not_match_training_data_index(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+    ):
+        """Columns present but with different names should raise."""
+        bad_df = basic_training_data.dataframe.copy()
+        bad_df.columns = [f"wrong_marker_{i}" for i in range(bad_df.shape[1])]
+        with pytest.raises(
+            ValueError,
+            match=r"^Incompatible data. Provided data have different column index",
+        ):
+            fitted_compression_model.compress_dataframe(bad_df)
+
+    def test_raise_when_columns_are_subset_of_training_markers(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+    ):
+        """Different number of columns should raise.
+
+        With `training_markers_index` error is about the index.
+        """
+        partial_df = basic_training_data.dataframe.iloc[:, :-1]
+        with pytest.raises(
+            ValueError,
+            match=r"^Incompatible data. Provided data have different column index",
+        ):
+            fitted_compression_model.compress_dataframe(partial_df)
+
+    def test_raise_when_columns_are_subset_of_training_markers_even_without_saved_index(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+    ):
+        """Different number of columns should raise.
+
+        Without `training_markers_index` error is about the number of columns.
+        """
+        partial_df = basic_training_data.dataframe.iloc[:, :-1]
+
+        fitted_compression_model.training_markers_index = None  # remove index
+        with pytest.raises(
+            ValueError,
+            match=(
+                r"^Incompatible data. Provided data have a different number of columns "
+            ),
+        ):
+            fitted_compression_model.compress_dataframe(partial_df)
+
+    def test_column_reordering(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+        mocker: MockerFixture,
+    ):
+        """Shuffled columns should be reordered internally before
+        encoding/compression."""
+        shuffled_df = basic_training_data.dataframe.sample(
+            frac=1, axis=1, random_state=0
+        )
+        assert not shuffled_df.columns.equals(basic_training_data.dataframe.columns)
+
+        mock_encode_snp_array = mocker.patch(
+            "deepcgp.compression.encode_snp_array",
+            wraps=encode_snp_array,
+        )
+        fitted_compression_model.compress_dataframe(shuffled_df)
+
+        mock_encode_snp_array.assert_called_once()
+        np.testing.assert_array_equal(
+            mock_encode_snp_array.call_args.args[0],
+            basic_training_data.dataframe.to_numpy(),
+        )
+
+    def test_result_matches_compress_on_manually_encoded_array(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+    ):
+        """compress_dataframe should be equivalent to manually encoding then calling
+        compress."""
+        result_dataframe = fitted_compression_model.compress_dataframe(
+            basic_training_data.dataframe
+        )
+        result_array = fitted_compression_model.compress(
+            basic_training_data.encoded_array
+        )
+        np.testing.assert_array_almost_equal(result_dataframe, result_array)
+
+    @pytest.mark.parametrize(
+        "encoding_map, expected_encoding_map",
+        [
+            (None, "USE_MODEL_ENCODING_MAP"),
+            (
+                {"A": [0, 0, 0, 1], "B": [1, 0, 0, 0]},
+                {"A": [0, 0, 0, 1], "B": [1, 0, 0, 0]},
+            ),
+        ],
+        ids=["None", "custom"],
+    )
+    def test_use_correct_encoding_map_when_CM_have_encoding_map(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+        encoding_map,
+        expected_encoding_map,
+        mocker: MockerFixture,
+    ):
+        """When the CompressionModel instance have the encoding map, it should be used
+        when provided `encoding_map` is None, else use provided `encoding_map`."""
+        if expected_encoding_map == "USE_MODEL_ENCODING_MAP":
+            expected_encoding_map = fitted_compression_model.encoding_map
+
+        mock_encode_snp_array = mocker.patch(
+            "deepcgp.compression.encode_snp_array",
+            wraps=encode_snp_array,
+        )
+
+        fitted_compression_model.compress_dataframe(
+            basic_training_data.dataframe, encoding_map=encoding_map
+        )
+        mock_encode_snp_array.assert_called_once()
+        assert (
+            mock_encode_snp_array.call_args.kwargs["encoding_map"]
+            == expected_encoding_map
+        )
+
+    @pytest.mark.parametrize(
+        "encoding_map",
+        [None, {"A": [0, 0, 0, 1], "B": [1, 0, 0, 0]}],
+        ids=["None", "custom"],
+    )
+    def test_forward_encoding_map_when_CM_do_not_have_encoding_map(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+        encoding_map,
+        mocker: MockerFixture,
+    ):
+        """When the CompressionModel instance do not have the encoding map, it pass the
+        provided `encoding_map` to encode_snp_array."""
+        fitted_compression_model.encoding_map = None
+
+        mock_encode_snp_array = mocker.patch(
+            "deepcgp.compression.encode_snp_array",
+            wraps=encode_snp_array,
+        )
+
+        fitted_compression_model.compress_dataframe(
+            basic_training_data.dataframe, encoding_map=encoding_map
+        )
+        mock_encode_snp_array.assert_called_once()
+        assert mock_encode_snp_array.call_args.kwargs["encoding_map"] == encoding_map
+
+    def test_default_missing_value(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+        mocker: MockerFixture,
+    ):
+        mock_encode_snp_array = mocker.patch(
+            "deepcgp.compression.encode_snp_array",
+            wraps=encode_snp_array,
+        )
+
+        fitted_compression_model.compress_dataframe(basic_training_data.dataframe)
+        mock_encode_snp_array.assert_called_once()
+        assert mock_encode_snp_array.call_args.kwargs["missing_values"] == {"N"}
+
+    def test_forward_missing_value(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+        mocker: MockerFixture,
+    ):
+        mock_encode_snp_array = mocker.patch(
+            "deepcgp.compression.encode_snp_array",
+            wraps=encode_snp_array,
+        )
+
+        fitted_compression_model.compress_dataframe(
+            basic_training_data.dataframe, missing_values={"-", "."}
+        )
+        mock_encode_snp_array.assert_called_once()
+        assert mock_encode_snp_array.call_args.kwargs["missing_values"] == {"-", "."}
+
+    def test_raise_if_missing_values_is_inconsitent_with_saved_encoding_map(
+        self,
+        fitted_compression_model: CompressionModel,
+        basic_training_data: TrainingDataFixture,
+    ):
+        with pytest.raises(
+            ValueError,
+            match=r"Missing values not encoded with a vector of 0",
+        ):
+            fitted_compression_model.compress_dataframe(
+                basic_training_data.dataframe, missing_values={"A"}
+            )
 
 
 def test_public_api_exports():

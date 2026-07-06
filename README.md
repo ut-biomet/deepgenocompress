@@ -2,8 +2,6 @@
 
 > This repository continues the work made on https://github.com/tanzilamohita/ConvCGP by
 > @tanzilamohita.
->
-> **Documentation: https://ut-biomet.github.io/DeepCGP/**
 
 ### Tanzila Raihan, Chyon Hae Kim, Hiroyuki Shimono, Akio Kimura, Hiroyoshi Iwata\*
 
@@ -24,6 +22,12 @@ Availability of Rice Datasets: You can access the dataset from
 
 Availability of Maize Datasets: You can access the dataset from
 [here](https://iagr.genomics.cn/CropGS/#/).
+
+## Documentation
+
+Online documentation is available at https://ut-biomet.github.io/DeepCGP/. It contains a
+page with a
+[usage example](https://ut-biomet.github.io/DeepCGP/quarto_pages/outputs/example.html).
 
 ## Development environment
 
@@ -69,8 +73,7 @@ The makes commands will probbly fail on a Windows environment (maybe try with Gi
 | Run tests                                                                                                                               | `make tests`             |
 | Lint and type-check the code (using [`ruff`](https://docs.astral.sh/ruff/) and [`basedpyright`](https://docs.basedpyright.com/latest/)) | `make python_checks`     |
 | Build the documentation                                                                                                                 | `make doc`               |
-| Format the code (also clean notebooks outputs)                                                                                          | `make format`            |
-| Execute notebooks and export to html                                                                                                    | `make notebooks_html`    |
+| Format the code                                                                                                                         | `make format`            |
 | Add a new dependency                                                                                                                    | `uv add <package>`       |
 | Add a dev dependency                                                                                                                    | `uv add --dev <package>` |
 

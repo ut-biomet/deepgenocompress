@@ -11,7 +11,7 @@ def test_full_compression_pipeline_with_sample_data():
     """
     data = pd.read_csv("tests/fixtures/X.csv", index_col=0)
 
-    geno_array = data.astype(str).values
+    geno_array = data.values
     encoded_geno_array = encode_snp_array(geno_array)
 
     cm = CompressionModel(

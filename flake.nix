@@ -46,6 +46,7 @@
             isort
             black
             ruff
+            pyPkgs.docformatter
             basedpyright
 
             # doc

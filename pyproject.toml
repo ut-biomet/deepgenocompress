@@ -36,6 +36,7 @@ lint_lsp_formatter = [
     "black>=26.3.1",
     "isort>=8.0.1",
     "ruff>=0.14.6",
+    "docformatter>=1.7.8",
 ]
 doc = [
     "sphinx>=9.0.4",
@@ -65,6 +66,10 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+
+[tool.ruff]
+exclude = ["source_material"]
 
 [tool.ruff.lint]
 extend-select = [
@@ -99,5 +104,13 @@ extend-select = [
   "ERA",
 ]
 
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
 [tool.pyright]
 "typeCheckingMode" = "basic"
+exclude = ["source_material", "**/__pycache__", "**/.*"]
+
+[tool.docformatter]
+black = true
