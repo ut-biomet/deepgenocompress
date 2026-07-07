@@ -2,7 +2,7 @@ import pytest
 from helpers import get_all_subclasses
 
 import deepcgp.exceptions as exceptions_module
-from deepcgp._base_exceptions import DeepcgpError
+from deepcgp._core.exceptions import DeepcgpError
 
 custom_errors = get_all_subclasses(DeepcgpError)
 

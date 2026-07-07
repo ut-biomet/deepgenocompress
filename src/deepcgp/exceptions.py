@@ -18,14 +18,14 @@ Examples
         print(f"deepcgp failed: {e}")
 """
 
-from deepcgp._base_exceptions import DeepcgpError
-from deepcgp.compression import (
+from ._core.compression import (
     CompressionModelConfigurationError,
     IncompatibleDataError,
     LayerSizesConfigurationError,
     ModelStateError,
 )
-from deepcgp.data_processing import InvalidEncodingMapError
+from ._core.data_processing import InvalidEncodingMapError
+from ._core.exceptions import DeepcgpError
 
 __all__ = [
     "CompressionModelConfigurationError",

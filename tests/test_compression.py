@@ -11,14 +11,14 @@ from keras.callbacks import EarlyStopping, History
 from pytest_mock import MockerFixture
 from sklearn.model_selection import train_test_split
 
-from deepcgp.compression import (
+from deepcgp._core.compression import (
     AutoencoderModels,
     CompressionModel,
     _check_layer_size_and_encoded_data_size,
     _check_layer_size_and_encoding_compatibility,
     _split_data,
 )
-from deepcgp.data_processing import (
+from deepcgp._core.data_processing import (
     _validate_encoding_map,
     build_one_hot_encoding_map,
     encode_snp_array,
@@ -1002,7 +1002,7 @@ class TestCompressionModel_initialisation_from_dataframe:
         self, basic_training_data: TrainingDataFixture, mocker: MockerFixture
     ):
         mock_validate_encoding_map = mocker.patch(
-            "deepcgp.data_processing._validate_encoding_map",
+            "deepcgp._core.data_processing._validate_encoding_map",
             wraps=_validate_encoding_map,
         )
 
@@ -1367,7 +1367,7 @@ class TestCompressionModel_fit:
             return aem
 
         mock_aem_class = mocker.patch(
-            "deepcgp.compression.AutoencoderModels", side_effect=fake_aem
+            "deepcgp._core.compression.AutoencoderModels", side_effect=fake_aem
         )
 
         model = CompressionModel(
@@ -1410,7 +1410,7 @@ class TestCompressionModel_fit:
         )
 
         mock_test_train_split = mocker.patch(
-            "deepcgp.compression.train_test_split", wraps=train_test_split
+            "deepcgp._core.compression.train_test_split", wraps=train_test_split
         )
         model.fit()
         calls = mock_test_train_split.call_args_list
@@ -1436,7 +1436,7 @@ class TestCompressionModel_fit:
         )
 
         mock_test_train_split = mocker.patch(
-            "deepcgp.compression.train_test_split", wraps=train_test_split
+            "deepcgp._core.compression.train_test_split", wraps=train_test_split
         )
         model.fit()
         calls = mock_test_train_split.call_args_list
@@ -1462,7 +1462,7 @@ class TestCompressionModel_fit:
         )
 
         mock_test_train_split = mocker.patch(
-            "deepcgp.compression.train_test_split", wraps=train_test_split
+            "deepcgp._core.compression.train_test_split", wraps=train_test_split
         )
         model.fit()
         calls = mock_test_train_split.call_args_list
@@ -1488,7 +1488,7 @@ class TestCompressionModel_fit:
         )
 
         mock_test_train_split = mocker.patch(
-            "deepcgp.compression.train_test_split", wraps=train_test_split
+            "deepcgp._core.compression.train_test_split", wraps=train_test_split
         )
         model.fit(seed=rng_seed)
         calls = mock_test_train_split.call_args_list
@@ -1700,7 +1700,7 @@ class TestCompressionModel_compress_dataframe:
         assert not shuffled_df.columns.equals(basic_training_data.dataframe.columns)
 
         mock_encode_snp_array = mocker.patch(
-            "deepcgp.compression.encode_snp_array",
+            "deepcgp._core.compression.encode_snp_array",
             wraps=encode_snp_array,
         )
         fitted_compression_model.compress_dataframe(shuffled_df)
@@ -1751,7 +1751,7 @@ class TestCompressionModel_compress_dataframe:
             expected_encoding_map = fitted_compression_model.encoding_map
 
         mock_encode_snp_array = mocker.patch(
-            "deepcgp.compression.encode_snp_array",
+            "deepcgp._core.compression.encode_snp_array",
             wraps=encode_snp_array,
         )
 
@@ -1781,7 +1781,7 @@ class TestCompressionModel_compress_dataframe:
         fitted_compression_model.encoding_map = None
 
         mock_encode_snp_array = mocker.patch(
-            "deepcgp.compression.encode_snp_array",
+            "deepcgp._core.compression.encode_snp_array",
             wraps=encode_snp_array,
         )
 
@@ -1798,7 +1798,7 @@ class TestCompressionModel_compress_dataframe:
         mocker: MockerFixture,
     ):
         mock_encode_snp_array = mocker.patch(
-            "deepcgp.compression.encode_snp_array",
+            "deepcgp._core.compression.encode_snp_array",
             wraps=encode_snp_array,
         )
 
@@ -1813,7 +1813,7 @@ class TestCompressionModel_compress_dataframe:
         mocker: MockerFixture,
     ):
         mock_encode_snp_array = mocker.patch(
-            "deepcgp.compression.encode_snp_array",
+            "deepcgp._core.compression.encode_snp_array",
             wraps=encode_snp_array,
         )
 
