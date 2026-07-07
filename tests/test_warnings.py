@@ -2,7 +2,7 @@ import pytest
 from helpers import get_all_subclasses
 
 import deepcgp.warnings as warnings_module
-from deepcgp._base_warnings import DeepcgpWarning
+from deepcgp._core.warnings import DeepcgpWarning
 
 custom_warnings = get_all_subclasses(DeepcgpWarning)
 

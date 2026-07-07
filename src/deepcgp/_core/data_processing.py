@@ -21,8 +21,8 @@ import numpy as np
 import pandas as pd
 from numpy.typing import ArrayLike, NDArray
 
-from deepcgp._base_exceptions import DeepcgpError, _type_fullname
-from deepcgp._base_warnings import DeepcgpWarning, _deepcgp_warn
+from deepcgp._core.exceptions import DeepcgpError, _type_fullname
+from deepcgp._core.warnings import DeepcgpWarning, _deepcgp_warn
 
 
 class AllZerosEncodedWarning(DeepcgpWarning):

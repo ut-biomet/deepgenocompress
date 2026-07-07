@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 from pytest_mock import MockerFixture
 
-from deepcgp.data_processing import (
+from deepcgp._core.data_processing import (
     AllZerosEncodedWarning,
     _validate_encoding_map,
     build_one_hot_encoding_map,
@@ -501,7 +501,7 @@ class TestEncodeSnpArray:
     ):
         """Test build_one_hot_encoding_map is called with default parameters."""
         mock_build_one_hot_encoding_map = mocker.patch(
-            "deepcgp.data_processing.build_one_hot_encoding_map",
+            "deepcgp._core.data_processing.build_one_hot_encoding_map",
             wraps=build_one_hot_encoding_map,
         )
         encode_snp_array(basic_geno_array)
@@ -520,7 +520,7 @@ class TestEncodeSnpArray:
     ):
         """Test build_one_hot_encoding_map is called if encoding_map is None."""
         mock_build_one_hot_encoding_map = mocker.patch(
-            "deepcgp.data_processing.build_one_hot_encoding_map",
+            "deepcgp._core.data_processing.build_one_hot_encoding_map",
             wraps=build_one_hot_encoding_map,
         )
         encode_snp_array(
@@ -545,7 +545,7 @@ class TestEncodeSnpArray:
     ):
         """Test _validate_encoding_map is called encoding_map is provided."""
         mock_validate = mocker.patch(
-            "deepcgp.data_processing._validate_encoding_map",
+            "deepcgp._core.data_processing._validate_encoding_map",
             wraps=_validate_encoding_map,
         )
         encode_snp_array(

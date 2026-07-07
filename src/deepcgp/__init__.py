@@ -7,9 +7,9 @@ predictive models from their compressed representations.
 import logging
 
 from . import exceptions, warnings
-from .compression import AutoencoderModels, CompressionModel
-from .data_processing import build_one_hot_encoding_map, encode_snp_array
-from .genomic_prediction import create_model
+from ._core.compression import AutoencoderModels, CompressionModel
+from ._core.data_processing import build_one_hot_encoding_map, encode_snp_array
+from ._core.genomic_prediction import create_model
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 

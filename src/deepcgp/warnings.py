@@ -4,14 +4,14 @@ All warnings issued by deepcgp inherit from :class:`DeepcgpWarning`, allowing ca
 catch any package-specific warnings.
 """
 
-from deepcgp._base_warnings import DeepcgpWarning
-from deepcgp.compression import (
+from ._core.compression import (
     ColumnPaddingWarning,
     IncompleteEncodingChunkWarning,
     LessThanOneAlleleChunks,
     NonCompressiveAutoencoderWarning,
 )
-from deepcgp.data_processing import AllZerosEncodedWarning
+from ._core.data_processing import AllZerosEncodedWarning
+from ._core.warnings import DeepcgpWarning
 
 __all__ = [
     "AllZerosEncodedWarning",
