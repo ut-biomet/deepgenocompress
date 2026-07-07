@@ -103,10 +103,10 @@ extend-select = [
   "N",   # to make test class name more permisive
   "SLF", # to test private member
 ]
+"docs/**" = ["ERA"]
+"{playground,scratch,sandbox}*.py" = ["D","DOC", "TID", "ARG", "T20", "F401", "TID251"]
+"{playground,scratch,sandbox}*/**" = ["D","DOC", "TID", "ARG", "T20", "F401", "TID251"]
 
-"docs/**" = [
-  "ERA",
-]
 
 
 [tool.ruff.lint.pydocstyle]

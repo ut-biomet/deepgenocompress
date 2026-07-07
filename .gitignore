@@ -16,3 +16,8 @@ wheels/
 docs/_build/
 *.qmd.otter.py
 docs/quarto_pages/outputs/
+
+# scratch files
+playground*
+scratch*
+sandbox*
