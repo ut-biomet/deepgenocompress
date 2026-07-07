@@ -6,11 +6,13 @@ import pytest
 from pytest_mock import MockerFixture
 
 from deepcgp.data_processing import (
+    AllZerosEncodedWarning,
     _validate_encoding_map,
     build_one_hot_encoding_map,
     encode_snp_array,
 )
 from deepcgp.exceptions import DeepcgpError, InvalidEncodingMapError
+from deepcgp.warnings import DeepcgpWarning
 
 
 @pytest.fixture
@@ -62,6 +64,20 @@ def basic_geno_array_with_missing_values(missing_values_fixt):
             ["T", "A", "G", "G", m(), "C", "A"],
         ]
     )
+
+
+class TestAllZerosEncodedWarning:
+    def test_warning_is_DeepcgpWarning(self):
+        assert issubclass(AllZerosEncodedWarning, DeepcgpWarning)
+
+    def test_warning_message(self):
+        expected_msg = (
+            "The encoded array contains only zeros. This indicate that all "
+            "values in geno_array are missing or not present in encoding_map."
+        )
+        warn = AllZerosEncodedWarning()
+
+        assert expected_msg in str(warn)
 
 
 class TestInvalidEncodingMapError:
@@ -557,13 +573,7 @@ class TestEncodeSnpArray:
         np.testing.assert_array_equal(result_t, np.array([basic_encoding_map["T"]]))
 
         geno_unkown = np.array([["N"]])
-        with pytest.warns(
-            UserWarning,
-            match=(
-                "The encoded array contains only zeros. This may indicate that all "
-                "values in geno_array are missing or not present in encoding_map."
-            ),
-        ):
+        with pytest.warns(AllZerosEncodedWarning):
             result = encode_snp_array(geno_unkown, encoding_map=basic_encoding_map)
         np.testing.assert_array_equal(
             result, np.array([[0] * len(basic_encoding_map["A"])])
@@ -574,13 +584,7 @@ class TestEncodeSnpArray:
         encoding_values_len = len(basic_encoding_map["A"])
         geno_unkown = np.array([[""]])
 
-        with pytest.warns(
-            UserWarning,
-            match=(
-                "The encoded array contains only zeros. This may indicate that all "
-                "values in geno_array are missing or not present in encoding_map."
-            ),
-        ):
+        with pytest.warns(AllZerosEncodedWarning):
             result = encode_snp_array(geno_unkown, encoding_map=basic_encoding_map)
         np.testing.assert_array_equal(result, np.array([[0] * encoding_values_len]))
 
@@ -591,13 +595,7 @@ class TestEncodeSnpArray:
     def test_with_empty_array(self, basic_encoding_map):
         geno_empty = np.array([[]])
 
-        with pytest.warns(
-            UserWarning,
-            match=(
-                "The encoded array contains only zeros. This may indicate that all "
-                "values in geno_array are missing or not present in encoding_map."
-            ),
-        ):
+        with pytest.warns(AllZerosEncodedWarning):
             result = encode_snp_array(geno_empty, encoding_map=basic_encoding_map)
         np.testing.assert_array_equal(result, np.array([[]]))
 
@@ -712,13 +710,7 @@ class TestEncodeSnpArray:
         )
         encoding_map = {"Z": [1, 0], "Y": [0, 1]}
 
-        with pytest.warns(
-            UserWarning,
-            match=(
-                "The encoded array contains only zeros. This may indicate that all "
-                "values in geno_array are missing or not present in encoding_map."
-            ),
-        ):
+        with pytest.warns(AllZerosEncodedWarning):
             result = encode_snp_array(geno, encoding_map=encoding_map)
         expected = np.array(
             [

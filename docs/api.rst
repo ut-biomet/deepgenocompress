@@ -20,3 +20,11 @@ deepcgp.exceptions
    :members:
    :show-inheritance:
    :undoc-members:
+
+deepcgp.warnings
+~~~~~~~~~~~~~~~~~~
+
+.. automodule:: deepcgp.warnings
+   :members:
+   :show-inheritance:
+   :undoc-members:

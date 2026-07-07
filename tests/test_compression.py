@@ -31,6 +31,14 @@ from deepcgp.exceptions import (
     LayerSizesConfigurationError,
     ModelStateError,
 )
+from deepcgp.warnings import (
+    AllZerosEncodedWarning,
+    ColumnPaddingWarning,
+    DeepcgpWarning,
+    IncompleteEncodingChunkWarning,
+    LessThanOneAlleleChunks,
+    NonCompressiveAutoencoderWarning,
+)
 
 LAYER_SIZES_CASES = [
     pytest.param([32, 16, 8, 4], id="2-encoding-layers"),
@@ -47,6 +55,89 @@ def layer_sizes(request):
 @pytest.fixture
 def basic_autoencoder_models(layer_sizes):
     return AutoencoderModels(layer_sizes)
+
+
+class TestNonCompressiveAutoencoderWarning:
+    def test_warning_is_DeepcgpWarning(self):
+        assert issubclass(NonCompressiveAutoencoderWarning, DeepcgpWarning)
+
+    def test_warning_message(self):
+        expected_msg = (
+            "Latent layer size (10) is equal or larger than "
+            "the input layer size (9). This will expand rather "
+            "than compress the data."
+        )
+        warn = NonCompressiveAutoencoderWarning([9, 8, 10])
+
+        assert expected_msg in str(warn)
+
+    def test_warning_extra(self):
+        warn = NonCompressiveAutoencoderWarning([9, 8, 10])
+
+        assert warn.extra["layer_sizes"] == [9, 8, 10]
+
+
+class TestColumnPaddingWarning:
+    def test_warning_is_DeepcgpWarning(self):
+        assert issubclass(ColumnPaddingWarning, DeepcgpWarning)
+
+    def test_warning_message(self):
+        expected_msg = (
+            "layer_sizes[0]=50 is not a divisor of the number of encoded columns (75). "
+            "Column padding (filled with 0) will be added to the end of the data "
+            "to fit requested input layer size."
+        )
+        warn = ColumnPaddingWarning(first_layer_size=50, n_encoded_cols=75)
+
+        assert expected_msg in str(warn)
+
+    def test_warning_extra(self):
+        warn = ColumnPaddingWarning(first_layer_size=50, n_encoded_cols=75)
+
+        assert warn.extra["first_layer_size"] == 50
+        assert warn.extra["n_encoded_cols"] == 75
+
+
+class TestIncompleteEncodingChunkWarning:
+    def test_warning_is_DeepcgpWarning(self):
+        assert issubclass(IncompleteEncodingChunkWarning, DeepcgpWarning)
+
+    def test_warning_message(self):
+        expected_msg = (
+            "layer_sizes[0]=50 is not a multiple of encoding_size=13. (ie. each "
+            "chunk will cut through encoded alleles, leaving incomplete encodings "
+            "at chunk edges)"
+        )
+        warn = IncompleteEncodingChunkWarning(first_layer_size=50, encoding_size=13)
+
+        assert expected_msg in str(warn)
+
+    def test_warning_extra(self):
+        warn = IncompleteEncodingChunkWarning(first_layer_size=50, encoding_size=13)
+
+        assert warn.extra["first_layer_size"] == 50
+        assert warn.extra["encoding_size"] == 13
+
+
+class TestLessThanOneAlleleChunks:
+    def test_warning_is_DeepcgpWarning(self):
+        assert issubclass(LessThanOneAlleleChunks, DeepcgpWarning)
+
+    def test_warning_message(self):
+        expected_msg = (
+            "layer_sizes[0]=10 is lower or equal to "
+            "`encoding_size` (50) (ie. each chunk will consist of 1 or "
+            "less encoded allele)."
+        )
+        warn = LessThanOneAlleleChunks(first_layer_size=10, encoding_size=50)
+
+        assert expected_msg in str(warn)
+
+    def test_warning_extra(self):
+        warn = LessThanOneAlleleChunks(first_layer_size=10, encoding_size=50)
+
+        assert warn.extra["first_layer_size"] == 10
+        assert warn.extra["encoding_size"] == 50
 
 
 class TestLayerSizesConfigurationError:
@@ -329,25 +420,13 @@ class TestAutoencoderModels:
         assert aem.autoencoder.output_shape == (None, layer_sizes[0])
 
     def test_input_dim_one(self):
-        with pytest.warns(
-            UserWarning,
-            match=(
-                r"Latent layer size \(\d+\) is equal or "
-                r"larger than the input layer size \(1\)"
-            ),
-        ):
+        with pytest.warns(NonCompressiveAutoencoderWarning):
             aem = AutoencoderModels([1, 16, 8, 4])
         assert aem.autoencoder.input_shape == (None, 1)
         assert aem.autoencoder.output_shape == (None, 1)
 
     def test_no_compression(self):
-        with pytest.warns(
-            UserWarning,
-            match=(
-                r"Latent layer size \(\d+\) is equal or "
-                r"larger than the input layer size \(\d+\)"
-            ),
-        ):
+        with pytest.warns(NonCompressiveAutoencoderWarning):
             aem = AutoencoderModels([10, 10, 10, 10])
         assert aem.encoder.output_shape == (None, 10)
         assert aem.autoencoder.output_shape == (None, 10)
@@ -400,66 +479,12 @@ class TestAutoencoderModels:
         assert not AutoencoderModels([4, 3, 2]).is_fitted
 
     def test_raise_warning_if_latent_size_equal_input_size(self):
-        with pytest.warns(
-            UserWarning,
-            match=r"is equal or larger than",
-        ) as warn_info:
+        with pytest.warns(NonCompressiveAutoencoderWarning):
             AutoencoderModels([4, 3, 4])
 
-        expected_message = (
-            "Latent layer size (4) is equal or larger than "
-            "the input layer size (4). This will expand rather "
-            "than compress the data."
-        )
-        assert str(warn_info[0].message) == expected_message
-
     def test_raise_warning_if_latent_size_larger_than_input_size(self):
-        with pytest.warns(
-            UserWarning,
-            match=r"is equal or larger than",
-        ) as warn_info:
+        with pytest.warns(NonCompressiveAutoencoderWarning):
             AutoencoderModels([5, 7, 8])
-
-        expected_message = (
-            "Latent layer size (8) is equal or larger than "
-            "the input layer size (5). This will expand rather "
-            "than compress the data."
-        )
-        assert str(warn_info[0].message) == expected_message
-
-    def test_warning_when_enlarging_data(self):
-        with pytest.warns(
-            UserWarning,
-            match=(
-                r"Latent layer size \(\d+\) is equal or "
-                r"larger than the input layer size \(\d+\)"
-            ),
-        ) as warn_info:
-            AutoencoderModels([1, 5, 3])
-
-        expected_message = (
-            "Latent layer size (3) is equal or larger than "
-            "the input layer size (1). This will expand rather "
-            "than compress the data."
-        )
-        assert str(warn_info[0].message) == expected_message
-
-    def test_warning_when_data_size_remains_the_same(self):
-        with pytest.warns(
-            UserWarning,
-            match=(
-                r"Latent layer size \(\d+\) is equal or "
-                r"larger than the input layer size \(\d+\)"
-            ),
-        ) as warn_info:
-            AutoencoderModels([7, 3, 7])
-
-        expected_message = (
-            "Latent layer size (7) is equal or larger than "
-            "the input layer size (7). This will expand rather "
-            "than compress the data."
-        )
-        assert str(warn_info[0].message) == expected_message
 
 
 @dataclass
@@ -560,23 +585,12 @@ class Test_check_layer_size_and_encoded_data_size:
         assert _check_layer_size_and_encoded_data_size(8, 8) is None
 
     def test_warn_when_n_cols_is_not_divisible_by_first_layer_size(self):
-        with pytest.warns(UserWarning, match="is not a divisor of n_cols"):
+        with pytest.warns(ColumnPaddingWarning):
             _check_layer_size_and_encoded_data_size(10, 3)
 
     def test_warn_when_n_cols_is_lower_than_first_layer_size(self):
-        with pytest.warns(UserWarning, match="is not a divisor of n_cols"):
+        with pytest.warns(ColumnPaddingWarning):
             _check_layer_size_and_encoded_data_size(5, 10)
-
-    def test_warning_message(self):
-        with pytest.warns(UserWarning, match="is not a divisor of n_cols") as warn_info:
-            _check_layer_size_and_encoded_data_size(13, 7)
-
-        expected_message = (
-            "layer_sizes[0]=7 is not a divisor of n_cols=13. "
-            "Column padding (filled with 0) will be added to the end of the data "
-            "to fit requested layer_sizes[0]"
-        )
-        assert str(warn_info[0].message) == expected_message
 
 
 class Test_check_layer_size_and_encoding_compatibility:
@@ -584,36 +598,16 @@ class Test_check_layer_size_and_encoding_compatibility:
         assert _check_layer_size_and_encoding_compatibility(10, 5) is None
 
     def test_warn_when_encoding_size_equals_first_layer(self):
-        with pytest.warns(
-            UserWarning,
-            match=r"layer_sizes\[0\]=8 is equal to `encoding_size`.",
-        ) as warn_info:
+        with pytest.warns(LessThanOneAlleleChunks):
             assert _check_layer_size_and_encoding_compatibility(8, 8) is None
 
-        expected_message = (
-            "layer_sizes[0]=8 is equal to `encoding_size` "
-            "(ie. each chunk will consist of only 1 encoded allele)."
-        )
-        assert str(warn_info[0].message) == expected_message
-
     def test_warns_when_encoding_size_not_multiple_of_n_cols(self):
-        with pytest.warns(UserWarning, match="is not a multiple of"):
+        with pytest.warns(IncompleteEncodingChunkWarning):
             _check_layer_size_and_encoding_compatibility(10, 3)
 
     def test_warns_when_encoding_size_larger_than_first_layer(self):
-        with pytest.warns(UserWarning, match="is not a multiple of"):
+        with pytest.warns((LessThanOneAlleleChunks, IncompleteEncodingChunkWarning)):
             _check_layer_size_and_encoding_compatibility(10, 20)
-
-    def test_warning_message(self):
-        with pytest.warns(UserWarning, match=r"is not a multiple of") as warn_info:
-            _check_layer_size_and_encoding_compatibility(10, 7)
-
-        expected_message = (
-            "layer_sizes[0]=10 is not a multiple of encoding_size=7. "
-            "(ie. each chunk will cut through encoded alleles, "
-            "leaving incomplete encodings at chunk edges)"
-        )
-        assert str(warn_info[0].message) == expected_message
 
 
 class Test_split_data:
@@ -687,7 +681,7 @@ class Test_split_data:
         n_cols = training_data_requiring_padding.encoded_array.shape[1]
         chunk_size = training_data_requiring_padding.layer_sizes[0]
 
-        with pytest.warns(UserWarning):
+        with pytest.warns(ColumnPaddingWarning):
             result = _split_data(
                 training_data_requiring_padding.encoded_array,
                 training_data_requiring_padding.layer_sizes[0],
@@ -804,10 +798,7 @@ class TestCompressionModel_basic_initialisation:
         self,
         basic_training_data: TrainingDataFixture,
     ):
-        with pytest.warns(
-            UserWarning,
-            match="is not a divisor of n_cols",
-        ):
+        with pytest.warns(ColumnPaddingWarning):
             CompressionModel(
                 training_encoded_geno_array=basic_training_data.encoded_array,
                 layer_sizes=[7, 3, 1],
@@ -1050,13 +1041,7 @@ class TestCompressionModel_initialisation_from_dataframe:
             "Z": [0.0, 1.0],
         }
 
-        with pytest.warns(
-            UserWarning,
-            match=(
-                "The encoded array contains only zeros. This may indicate that all "
-                "values in geno_array are missing or not present in encoding_map."
-            ),
-        ):
+        with pytest.warns(AllZerosEncodedWarning):
             cm = CompressionModel.from_dataframe(
                 training_dataframe=basic_training_data.dataframe,
                 encoding_map=encoding_map,
@@ -1064,13 +1049,7 @@ class TestCompressionModel_initialisation_from_dataframe:
             )
 
         # correct encoding
-        with pytest.warns(
-            UserWarning,
-            match=(
-                "The encoded array contains only zeros. This may indicate that all "
-                "values in geno_array are missing or not present in encoding_map."
-            ),
-        ):
+        with pytest.warns(AllZerosEncodedWarning):
             expected_encoded_array = encode_snp_array(
                 basic_training_data.dataframe.to_numpy(),
                 missing_values=missing_values,
@@ -1091,15 +1070,11 @@ class TestCompressionModel_initialisation_from_dataframe:
         # Just a smoke test, full validation done is done in
         # TestCompressionModel_layer_sizes and
         # TestCompressionModel_training_encoded_geno_array
-        with pytest.warns(UserWarning) as warnings:
+        with pytest.warns((ColumnPaddingWarning, IncompleteEncodingChunkWarning)):
             CompressionModel.from_dataframe(
                 training_dataframe=basic_training_data.dataframe,
                 layer_sizes=[7, 3, 1],
             )
-
-        messages = [str(w.message) for w in warnings]
-        assert any("is not a multiple of encoding_size" in m for m in messages)
-        assert any("is not a divisor of n_cols" in m for m in messages)
 
 
 class TestCompressionModel_layer_sizes:
@@ -1114,10 +1089,15 @@ class TestCompressionModel_layer_sizes:
         cm = CompressionModel(
             training_encoded_geno_array=basic_training_data.encoded_array
         )
-        with pytest.warns(
-            UserWarning,
-            match="is not a divisor of n_cols",
-        ):
+        with pytest.warns(ColumnPaddingWarning):
+            cm.layer_sizes = [7, 3, 1]
+
+    def test_setter_warn_when_incompatible_with_encoding_size(
+        self,
+        basic_training_data: TrainingDataFixture,
+    ):
+        cm = CompressionModel(encoding_map=basic_training_data.encoding_map)
+        with pytest.warns(IncompleteEncodingChunkWarning):
             cm.layer_sizes = [7, 3, 1]
 
 
@@ -1128,10 +1108,7 @@ class TestCompressionModel_training_encoded_geno_array:
         default_compression_model: CompressionModel,
     ):
         default_compression_model.layer_sizes = [7, 3, 1]
-        with pytest.warns(
-            UserWarning,
-            match="is not a divisor of n_cols",
-        ):
+        with pytest.warns(ColumnPaddingWarning):
             default_compression_model.training_encoded_geno_array = (
                 basic_training_data.encoded_array
             )
@@ -1249,10 +1226,7 @@ class TestCompressionModel_encoding_map:
         # n_cols (24) is divisible by 3 (8 markers).
         # but chunk_size (8) is not a multiple of 3.
         bad_encoding_map = {"A": [1.0, 0.0, 0.0]}
-        with pytest.warns(
-            UserWarning,
-            match="is not a multiple of encoding_size",
-        ):
+        with pytest.warns(IncompleteEncodingChunkWarning):
             cm.encoding_map = bad_encoding_map
 
     def test_setter_raise_with_incompatible_marker_index(

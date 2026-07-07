@@ -6,7 +6,7 @@ predictive models from their compressed representations.
 
 import logging
 
-from . import exceptions
+from . import exceptions, warnings
 from .compression import AutoencoderModels, CompressionModel
 from .data_processing import build_one_hot_encoding_map, encode_snp_array
 from .genomic_prediction import create_model
@@ -20,4 +20,5 @@ __all__ = [
     "create_model",
     "encode_snp_array",
     "exceptions",
+    "warnings",
 ]

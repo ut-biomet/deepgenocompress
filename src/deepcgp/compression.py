@@ -19,7 +19,6 @@ CompressionModel
 
 import logging
 import random
-import warnings
 from collections.abc import Collection, Mapping
 from enum import StrEnum, auto
 from typing import Any, ClassVar, TypedDict
@@ -35,6 +34,7 @@ from numpy.typing import ArrayLike, NDArray
 from sklearn.model_selection import train_test_split
 
 from deepcgp._base_exceptions import DeepcgpError, _type_fullname
+from deepcgp._base_warnings import DeepcgpWarning, _deepcgp_warn
 
 from .data_processing import (
     _validate_encoding_map,
@@ -78,6 +78,7 @@ class LayerSizesConfigurationError(DeepcgpError):
         """Possible invalid reasons."""
 
         def __repr__(self) -> str:
+            """Return the string representation."""
             return self.name
 
         INVALID_TYPE = auto()
@@ -86,6 +87,7 @@ class LayerSizesConfigurationError(DeepcgpError):
         """Provided layer sizes have less than 2 elements."""
         INVALID_LAYER_TYPE = auto()
         """Provided layer sizes values are not :class:`int`."""
+
     _MESSAGES: ClassVar[dict["LayerSizesConfigurationError.ReasonCode", str]] = {
         ReasonCode.INVALID_TYPE: (
             "`layer_sizes` must be a list or tuple, got a {provided_type_str}."
@@ -187,12 +189,28 @@ def _check_layer_sizes(layer_sizes):
                 },
             )
     if layer_sizes[-1] >= layer_sizes[0]:
-        warnings.warn(
-            f"Latent layer size ({layer_sizes[-1]}) is equal or larger than "
-            f"the input layer size ({layer_sizes[0]}). This will expand rather "
-            "than compress the data.",
-            UserWarning,
-            stacklevel=2,
+        _deepcgp_warn(NonCompressiveAutoencoderWarning(layer_sizes))
+
+
+class NonCompressiveAutoencoderWarning(DeepcgpWarning):
+    """Issued when the autoencoder will increase data size.
+
+    Due to the latent layer size being larger than the input size.
+    """
+
+    class _Extra(TypedDict, total=True):
+        layer_sizes: list[int]
+
+    extra: "_Extra | dict[str, Any]"
+
+    def __init__(self, layer_sizes):
+        super().__init__(
+            message=(
+                f"Latent layer size ({layer_sizes[-1]}) is equal or larger than "
+                f"the input layer size ({layer_sizes[0]}). This will expand rather "
+                "than compress the data."
+            ),
+            extra={"layer_sizes": layer_sizes},
         )
 
 
@@ -329,6 +347,7 @@ class ModelStateError(DeepcgpError):
         """Possible invalid reasons."""
 
         def __repr__(self) -> str:
+            """Return the string representation."""
             return self.name
 
         NO_TRAINING_DATA = auto()
@@ -339,6 +358,7 @@ class ModelStateError(DeepcgpError):
         MODEL_NOT_FITTED = auto()
         """:attr:`CompressionModel.is_fitted` is ``False``, so the autoencoders are not
         ready to compress data."""
+
     _MESSAGES: ClassVar[dict["ModelStateError.ReasonCode", str]] = {
         ReasonCode.NO_TRAINING_DATA: "No training data available.",
         ReasonCode.NO_LAYER_SIZES: "`layer_sizes` is not set.",
@@ -380,6 +400,7 @@ class IncompatibleDataError(DeepcgpError):
         """Possible invalid reasons."""
 
         def __repr__(self) -> str:
+            """Return the string representation."""
             return self.name
 
         INVALID_NUMBER_OF_COLUMNS = auto()
@@ -387,6 +408,7 @@ class IncompatibleDataError(DeepcgpError):
         encoded training data."""
         INVALID_COLUMN_INDEX = auto()
         """The provided DataFrame's columns do not match the training markers index."""
+
     _MESSAGES: ClassVar[dict["IncompatibleDataError.ReasonCode", str]] = {
         ReasonCode.INVALID_NUMBER_OF_COLUMNS: (
             "Incompatible data. Expected {encoded_training_data_ncols} columns "
@@ -441,12 +463,14 @@ class CompressionModelConfigurationError(DeepcgpError):
         """Possible invalid reasons."""
 
         def __repr__(self) -> str:
+            """Return the string representation."""
             return self.name
 
         EMPTY_DATAFRAME = auto()
         """The training DataFrame is empty."""
         MARKER_INDEX_SIZE_MISMATCH = auto()
         """Marker index length missmatch training data size."""
+
     _MESSAGES: ClassVar[dict["CompressionModelConfigurationError.ReasonCode", str]] = {
         ReasonCode.EMPTY_DATAFRAME: (
             "`training_dataframe` is empty. Provide a DataFrame compatible with "
@@ -565,12 +589,54 @@ def _check_layer_size_and_encoded_data_size(n_cols, first_layer_size):
         will be required to fit the data into equal-sized chunks.
     """
     if n_cols % first_layer_size != 0:
-        warnings.warn(
-            f"layer_sizes[0]={first_layer_size} is not a divisor of {n_cols=}. "
-            "Column padding (filled with 0) will be added to the end of the data "
-            "to fit requested layer_sizes[0]",
-            UserWarning,
-            stacklevel=2,
+        _deepcgp_warn(
+            ColumnPaddingWarning(
+                first_layer_size=first_layer_size, n_encoded_cols=n_cols
+            )
+        )
+
+
+class ColumnPaddingWarning(DeepcgpWarning):
+    """Issued when padding will be added to data.
+
+    Due to missalignment between input layer size and number of encoded columns in data.
+
+    Example
+    -------
+    With Input layer size of 4 and an encoded data with 6 columns.
+
+    .. code-block:: text
+
+        Allele A -> [0 1]
+        Allele T -> [1 0]
+
+        Raw sequence:     <start> |  A  |  A  |  T  | <end>
+        Encoded sequence:         | 0 1 | 0 1 | 1 0 |
+        expected chunks:          └───────────┴───────────┘
+                                                      ▲ ▲ missing data
+                                                      ▼ ▼ add zero padding
+        actual chunks:            └ 0 1   0 1 ┴ 1 0   0 0 ┘
+
+    """
+
+    class _Extra(TypedDict, total=True):
+        first_layer_size: int
+        n_encoded_cols: int
+
+    extra: "_Extra | dict[str, Any]"
+
+    def __init__(self, first_layer_size, n_encoded_cols):
+        super().__init__(
+            message=(
+                f"layer_sizes[0]={first_layer_size} is not a divisor of the number of "
+                f"encoded columns ({n_encoded_cols}). Column padding (filled with 0) "
+                "will be added to the end of the data to fit requested input layer "
+                "size."
+            ),
+            extra={
+                "first_layer_size": first_layer_size,
+                "n_encoded_cols": n_encoded_cols,
+            },
         )
 
 
@@ -604,19 +670,100 @@ def _check_layer_size_and_encoding_compatibility(first_layer_size, encoding_size
         each chunk will consist of exactly one encoded allele.
     """
     if first_layer_size % encoding_size != 0:
-        warnings.warn(
-            f"layer_sizes[0]={first_layer_size} is not a multiple of "
-            f"{encoding_size=}. (ie. each chunk will cut through encoded alleles, "
-            "leaving incomplete encodings at chunk edges)",
-            UserWarning,
-            stacklevel=2,
+        _deepcgp_warn(IncompleteEncodingChunkWarning(first_layer_size, encoding_size))
+    if encoding_size >= first_layer_size:
+        _deepcgp_warn(
+            LessThanOneAlleleChunks(
+                first_layer_size=first_layer_size, encoding_size=encoding_size
+            )
         )
-    if encoding_size == first_layer_size:
-        warnings.warn(
-            f"layer_sizes[0]={first_layer_size} is equal to `encoding_size` "
-            "(ie. each chunk will consist of only 1 encoded allele).",
-            UserWarning,
-            stacklevel=2,
+
+
+class IncompleteEncodingChunkWarning(DeepcgpWarning):
+    """Issued when chuncks will consist of incomplete encoded alleles.
+
+    Due to missalignment between input layer size encoding size.
+
+    Example
+    -------
+    With encoding size of 2 and an input layer size of 5.
+
+
+    .. code-block:: text
+
+        Allele A -> [0 1]
+        Allele T -> [1 0]
+
+        Raw sequence:     |  A  |  A  |  T  |  A  |  A  | ...
+        Encoded sequence: | 0 1 | 0 1 | 1 0 | 0 1 | 0 1 | ...
+        chunks:           ├──────────────┼──────────────┼ ...
+                               chunk 1       chunk 2
+
+        Encoded allele T is splited between 2 chunks
+
+    """
+
+    class _Extra(TypedDict, total=True):
+        first_layer_size: int
+        encoding_size: int
+
+    extra: "_Extra | dict[str, Any]"
+
+    def __init__(self, first_layer_size, encoding_size):
+        super().__init__(
+            message=(
+                f"layer_sizes[0]={first_layer_size} is not a multiple of "
+                f"{encoding_size=}. (ie. each chunk will cut through encoded alleles, "
+                "leaving incomplete encodings at chunk edges)"
+            ),
+            extra={
+                "first_layer_size": first_layer_size,
+                "encoding_size": encoding_size,
+            },
+        )
+
+
+class LessThanOneAlleleChunks(DeepcgpWarning):
+    """Issued when chuncks consist of only 1 alleles.
+
+    Due to input layer size being smaler than the encoding size.
+
+
+    Example
+    -------
+    With encoding size of 4 and an input layer size of 2:
+
+
+    .. code-block:: text
+
+        Allele A -> [0 0 0 1]
+        Allele T -> [0 0 1 0]
+
+        Raw sequence:     |    A    |    T    | ...
+        Encoded sequence: | 0 0 0 1 | 0 0 1 0 | ...
+        chunks:           ├────┼────┼────┼────┼ ...
+                            c1   c2   c3   c4   ...
+
+        Each chunks represent less than 1 allele.
+    """
+
+    class _Extra(TypedDict, total=True):
+        first_layer_size: int
+        encoding_size: int
+
+    extra: "_Extra | dict[str, Any]"
+
+    def __init__(self, first_layer_size, encoding_size):
+        super().__init__(
+            message=(
+                f"layer_sizes[0]={first_layer_size} is lower or equal to "
+                f"`encoding_size` ({encoding_size}) (ie. each chunk will consist of 1 "
+                "or less encoded allele)."
+            ),
+            extra={
+                "first_layer_size": first_layer_size,
+                "encoding_size": encoding_size,
+            },
         )
 
 
@@ -683,7 +830,6 @@ def _split_data(
         )
 
     n_chunks = encoded_geno_array.shape[1] // chunk_size
-
     return np.hsplit(encoded_geno_array, n_chunks)
 
 

@@ -1,31 +1,10 @@
-import importlib
-import inspect
-import pkgutil
-
 import pytest
+from helpers import get_all_subclasses
 
-import deepcgp
 import deepcgp.exceptions as exceptions_module
 from deepcgp._base_exceptions import DeepcgpError
 
-
-def _get_all_deepcgp_error_subclasses() -> dict[str, type]:
-    """Find every DeepcgpError subclass defined anywhere in the deepcgp package."""
-    custom_errors = {}
-    for module_info in pkgutil.walk_packages(deepcgp.__path__, prefix="deepcgp."):
-        module = importlib.import_module(module_info.name)
-        for name, obj in vars(module).items():
-            if not inspect.isclass(obj):
-                continue
-            if not issubclass(obj, DeepcgpError):
-                continue
-            if obj.__module__ != module_info.name:
-                continue  # only count it in the module where it's *defined*
-            custom_errors[name] = obj
-    return custom_errors
-
-
-custom_errors = _get_all_deepcgp_error_subclasses()
+custom_errors = get_all_subclasses(DeepcgpError)
 
 
 @pytest.mark.parametrize(

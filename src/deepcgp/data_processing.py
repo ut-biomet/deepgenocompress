@@ -12,7 +12,6 @@ encode_snp_array(geno_array, missing_values={"N"}, encoding_map=None)
     Encode a genotype array into a numerical matrix.
 """
 
-import warnings
 from collections.abc import Collection, Container, Mapping
 from enum import StrEnum, auto
 from numbers import Real
@@ -23,6 +22,20 @@ import pandas as pd
 from numpy.typing import ArrayLike, NDArray
 
 from deepcgp._base_exceptions import DeepcgpError, _type_fullname
+from deepcgp._base_warnings import DeepcgpWarning, _deepcgp_warn
+
+
+class AllZerosEncodedWarning(DeepcgpWarning):
+    """Issued when the encoded geno array only contains zeros.
+
+    This indicate the genotype array was interpreted as conatining missing values only.
+    """
+
+    def __init__(self):
+        super().__init__(
+            message="The encoded array contains only zeros. This indicate that all "
+            "values in geno_array are missing or not present in encoding_map."
+        )
 
 
 def build_one_hot_encoding_map(
@@ -110,6 +123,7 @@ class InvalidEncodingMapError(DeepcgpError):
         """Possible invalid reasons."""
 
         def __repr__(self) -> str:
+            """Return the string representation."""
             return self.name
 
         INVALID_TYPE = auto()
@@ -124,6 +138,7 @@ class InvalidEncodingMapError(DeepcgpError):
         MISSING_VALUE_NOT_ZERO = auto()
         """An allele listed as a missing value is not encoded as a vector of all
         zeros."""
+
     _MESSAGES: ClassVar[dict["InvalidEncodingMapError.ReasonCode", str]] = {
         ReasonCode.INVALID_TYPE: (
             f"`encoding_map` must be a {_type_fullname(Mapping)} "
@@ -330,11 +345,6 @@ def encode_snp_array(
     encoded_geno = np.array(encoded_rows, dtype=np.float32)
 
     if not np.any(encoded_geno):
-        warnings.warn(
-            "The encoded array contains only zeros. This may indicate that all values "
-            "in geno_array are missing or not present in encoding_map.",
-            UserWarning,
-            stacklevel=2,
-        )
+        _deepcgp_warn(AllZerosEncodedWarning())
 
     return encoded_geno
