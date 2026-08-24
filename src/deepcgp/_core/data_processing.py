@@ -24,6 +24,8 @@ from numpy.typing import ArrayLike, NDArray
 from deepcgp._core.exceptions import DeepcgpError, _type_fullname
 from deepcgp._core.warnings import DeepcgpWarning, _deepcgp_warn
 
+from .utils import encoding_size
+
 
 class AllZerosEncodedWarning(DeepcgpWarning):
     """Issued when the encoded geno array only contains zeros.
@@ -334,7 +336,7 @@ def encode_snp_array(
     else:
         encoding_map = build_one_hot_encoding_map(geno_array, missing_values)
 
-    encoding_length = len(next(iter(encoding_map.values())))
+    encoding_length = encoding_size(encoding_map)
 
     encoded_rows = []
     for row in geno_array:

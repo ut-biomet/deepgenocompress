@@ -14,9 +14,11 @@ from sklearn.model_selection import train_test_split
 from deepcgp._core.compression import (
     AutoencoderModels,
     CompressionModel,
+    LayerSizeOption,
     _check_layer_size_and_encoded_data_size,
     _check_layer_size_and_encoding_compatibility,
     _split_data,
+    possible_first_layer_sizes,
 )
 from deepcgp._core.data_processing import (
     _validate_encoding_map,
@@ -31,6 +33,7 @@ from deepcgp.exceptions import (
     LayerSizesConfigurationError,
     ModelStateError,
 )
+from deepcgp.utils import encoding_size
 from deepcgp.warnings import (
     AllZerosEncodedWarning,
     ColumnPaddingWarning,
@@ -1254,7 +1257,7 @@ class TestCompressionModel_encoding_map:
         assert err.extra["encoded_training_data_ncols"] == cm._n_col_train
 
         assert "encoding_size" in err.extra
-        assert err.extra["encoding_size"] == len(next(iter(bad_encoding_map.values())))
+        assert err.extra["encoding_size"] == encoding_size(bad_encoding_map)
 
         assert "markers_index" in err.extra
         assert (err.extra["markers_index"] == cm.training_markers_index).all()
@@ -1834,6 +1837,141 @@ class TestCompressionModel_compress_dataframe:
             )
         err = err_info.value
         assert err.reason == InvalidEncodingMapError.ReasonCode.MISSING_VALUE_NOT_ZERO
+
+
+class Test_possible_first_layer_sizes:
+
+    def test_returns_all_divisors_that_are_multiples_of_encoding_size(self):
+        result = possible_first_layer_sizes(n_encoded_colums=12, encoding_size=3)
+        assert result == [
+            LayerSizeOption(3, 4),
+            LayerSizeOption(6, 2),
+            LayerSizeOption(12, 1),
+        ]
+
+    def test_default_desired_n_chunks_to_None(self):
+        r1 = possible_first_layer_sizes(16, 2)
+        r2 = possible_first_layer_sizes(16, 2, desired_n_chunks=None)
+        assert r1 == r2
+
+    def test_layer_size_are_sorted_in_ascending_order(self):
+        result = possible_first_layer_sizes(n_encoded_colums=24, encoding_size=3)
+        sizes = [opt.first_layer_size for opt in result]
+        assert sizes == sorted(sizes)
+
+    def test_n_chunks_are_sorted_in_descending_order(self):
+        result = possible_first_layer_sizes(n_encoded_colums=24, encoding_size=3)
+        n_chunks = [opt.n_chunks for opt in result]
+        assert n_chunks == sorted(n_chunks, reverse=True)
+
+    def test_only_one_valid_option_with_n_cols_equals_encoding_size(self):
+        result = possible_first_layer_sizes(n_encoded_colums=42, encoding_size=42)
+        assert result == [LayerSizeOption(42, 1)]
+
+    def test_encoding_size_one_returns_all_divisors(self):
+        result = possible_first_layer_sizes(n_encoded_colums=12, encoding_size=1)
+        assert result == [
+            LayerSizeOption(1, 12),
+            LayerSizeOption(2, 6),
+            LayerSizeOption(3, 4),
+            LayerSizeOption(4, 3),
+            LayerSizeOption(6, 2),
+            LayerSizeOption(12, 1),
+        ]
+
+    def test_encoding_size_larger_than_n_cols(self):
+        result = possible_first_layer_sizes(n_encoded_colums=20, encoding_size=21)
+        assert result == []
+
+    def test_no_multiple_of_encoding_size_divides_n_cols(self):
+        result = possible_first_layer_sizes(n_encoded_colums=7, encoding_size=4)
+        assert result == []
+
+    def test_empty_result_ignores_desired_n_chunks(self):
+        result = possible_first_layer_sizes(
+            n_encoded_colums=7, encoding_size=4, desired_n_chunks=3
+        )
+        assert result == []
+
+    @pytest.mark.parametrize(
+        "desired_n_chunks, expected",
+        [
+            pytest.param(6, LayerSizeOption(2, 6), id="max_n_chunks"),
+            pytest.param(3, LayerSizeOption(4, 3), id="mid_n_chunks"),
+            pytest.param(2, LayerSizeOption(6, 2), id="mid_n_chunks_2"),
+            pytest.param(1, LayerSizeOption(12, 1), id="min_n_chunks"),
+        ],
+    )
+    def test_desired_n_chunks_exact_match_returns_correctly_single_option(
+        self, desired_n_chunks, expected
+    ):
+        result = possible_first_layer_sizes(
+            n_encoded_colums=12, encoding_size=2, desired_n_chunks=desired_n_chunks
+        )
+        assert result == [expected]
+
+    @pytest.mark.parametrize(
+        "desired_n_chunks, expected",
+        [
+            pytest.param(15, [LayerSizeOption(5, 12)], id="above_max_n_chunks"),
+            pytest.param(
+                10,
+                [LayerSizeOption(5, 12), LayerSizeOption(10, 6)],
+                id="mid_n_chunks",
+            ),
+            pytest.param(
+                5, [LayerSizeOption(10, 6), LayerSizeOption(15, 4)], id="mid_n_chunks"
+            ),
+            pytest.param(0, [LayerSizeOption(60, 1)], id="min_n_chunks_2"),
+        ],
+    )
+    def test_desired_n_chunks_no_exact_match_returns_correctly(
+        self, desired_n_chunks, expected
+    ):
+        result = possible_first_layer_sizes(
+            n_encoded_colums=60, encoding_size=5, desired_n_chunks=desired_n_chunks
+        )
+        assert result == expected
+
+    @pytest.mark.parametrize(
+        "desired_n_chunks",
+        [
+            pytest.param(10, id="above"),
+            pytest.param(1, id="matches"),
+            pytest.param(0, id="below"),
+        ],
+    )
+    def test_single_option_with_desired(self, desired_n_chunks):
+        result = possible_first_layer_sizes(
+            n_encoded_colums=5,
+            encoding_size=5,
+            desired_n_chunks=desired_n_chunks,
+        )
+        assert result == [LayerSizeOption(5, 1)]
+
+    def test_encoding_size_zero(self):
+        with pytest.warns(DeepcgpWarning) as warns:
+            result = possible_first_layer_sizes(n_encoded_colums=60, encoding_size=0)
+        assert result == []
+        assert "encoding_size <= 0 (0)" in str(warns[0].message)
+
+    def test_negative_encoding_size(self):
+        with pytest.warns(DeepcgpWarning) as warns:
+            result = possible_first_layer_sizes(n_encoded_colums=60, encoding_size=-1)
+        assert result == []
+        assert "encoding_size <= 0 (-1)" in str(warns[0].message)
+
+    def test_n_encoded_colums_zero(self):
+        with pytest.warns(DeepcgpWarning) as warns:
+            result = possible_first_layer_sizes(n_encoded_colums=0, encoding_size=6)
+        assert result == []
+        assert "n_encoded_colums <= 0 (0)" in str(warns[0].message)
+
+    def test_negative_n_encoded_colums(self):
+        with pytest.warns(DeepcgpWarning) as warns:
+            result = possible_first_layer_sizes(n_encoded_colums=-60, encoding_size=6)
+        assert result == []
+        assert "n_encoded_colums <= 0 (-60)" in str(warns[0].message)
 
 
 def test_public_api_exports():
