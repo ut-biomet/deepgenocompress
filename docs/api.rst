@@ -13,6 +13,14 @@ Module contents
 Submodules
 ----------
 
+deepcgp.utils
+~~~~~~~~~~~~~~~~~~
+
+.. automodule:: deepcgp.utils
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 deepcgp.exceptions
 ~~~~~~~~~~~~~~~~~~
 

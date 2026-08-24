@@ -21,7 +21,7 @@ import logging
 import random
 from collections.abc import Collection, Mapping
 from enum import StrEnum, auto
-from typing import Any, ClassVar, TypedDict
+from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, TypedDict
 
 import numpy as np
 import pandas as pd
@@ -30,6 +30,8 @@ from keras.callbacks import EarlyStopping
 from keras.layers import Dense
 from keras.losses import Loss
 from keras.optimizers import Adam
+
+from .utils import encoding_size
 from numpy.typing import ArrayLike, NDArray
 from sklearn.model_selection import train_test_split
 
@@ -977,19 +979,19 @@ class CompressionModel:
 
         _validate_encoding_map(encoding_map)
 
-        encoding_size = len(next(iter(encoding_map.values())))
+        enc_size = encoding_size(encoding_map)
 
         if self.training_encoded_geno_array is not None:
             if self.layer_sizes:
                 _check_layer_size_and_encoding_compatibility(
                     first_layer_size=self.layer_sizes[0],
-                    encoding_size=encoding_size,
+                    encoding_size=enc_size,
                 )
             if self.training_markers_index is not None:
                 _check_marker_index_size_compatibility(
                     self.training_markers_index,
                     self._n_col_train,
-                    encoding_size,
+                    enc_size,
                 )
 
         self._encoding_map = encoding_map
@@ -1010,7 +1012,7 @@ class CompressionModel:
         """
         if self.encoding_map is None:
             return None
-        return len(next(iter(self.encoding_map.values())))
+        return encoding_size(self.encoding_map)
 
     @property
     def _train_data_chunks(self) -> list[NDArray[np.float32]]:
@@ -1253,6 +1255,8 @@ class CompressionModel:
         --------
         :attr:`CompressionModel.chunk_size` : Derived from ``layer_sizes[0]``.
         :class:`AutoencoderModels` : Consumes ``layer_sizes`` to build each autoencoder.
+        :func:`utils.possible_first_layer_sizes` : Utility function to find
+            first layer perferctly compatible with the given encoded data structure
         """
         return self._layer_sizes
 
@@ -1654,3 +1658,162 @@ class CompressionModel:
             encoding_map=encoding_map or self.encoding_map,
         )
         return self.compress(encoded_geno_array, batch_size=batch_size)
+
+
+class LayerSizeOption(NamedTuple):
+    """Utility type representing a possible first-layer size and its chunk count.
+
+    The first value is the first layer size, and the second value is the number
+    of chunks resulting from that layer size.
+    """
+
+    first_layer_size: int
+    n_chunks: int
+
+
+def possible_first_layer_sizes(
+    n_encoded_colums: int,
+    encoding_size: int,
+    desired_n_chunks: int | None = None,
+) -> list[LayerSizeOption]:
+    """Find first layer sizes perferctly compatible with the given data structure.
+
+    When instantiating a :class:`deepcgp.CompressionModel` both
+    :attr:`deepcgp.CompressionModel.layer_sizes` and
+    :attr:`deepcgp.CompressionModel.training_encoded_geno_array` are checked to be sure
+    the first layer size divide the number of training data's columns and is a multiple
+    of the encoding size, so that the data can be split into equally sized chunks
+    without padding or splitting encoded alleles across chunk boundaries. This functions
+    help find first layer sizes matching those properties for a given the data
+    structure.
+
+    Parameters
+    ----------
+    n_encoded_colums :
+        Total number of columns in the encoded genotype array. Candidate first-layer
+        sizes must evenly divide this value to avoid
+        :class:`deepcgp.warnings.ColumnPaddingWarning`
+    encoding_size :
+        Number of columns used to encode a single allele. Candidate first-layer
+        sizes must be a multiple of this value to avoid
+        :class:`deepcgp.warnings.IncompleteEncodingChunkWarning`
+    desired_n_chunks :
+        If provided, narrow the returned options down to the one(s) whose resulting
+        chunk count is closest to this value. If ``None``, all valid options are
+        returned.
+
+    Returns
+    -------
+        List of :class:`LayerSizeOption`, sorted by ascending ``first_layer_size``
+        (equivalently, descending ``n_chunks``). Empty if no valid first-layer size
+        exists. If ``desired_n_chunks`` is provided and at least one valid option
+        exists, contains either a single option (exact match or closest match) or two
+        options (the two options closest to ``desired_n_chunks``, the one with a greater
+        ``n_chunks`` and the one with a lower ``n_chunks`` than the desired).
+
+    Warns
+    -----
+    deepcgp.warnings.DeepcgpWarning
+        If ``n_encoded_colums`` or ``encoding_size`` are not positive. No valid
+        first-layer size can exist in that case, and an empty list is returned.
+
+    See Also
+    --------
+    :class:`deepcgp.warnings.ColumnPaddingWarning`
+    :class:`deepcgp.warnings.IncompleteEncodingChunkWarning`
+
+    Examples
+    --------
+    .. jupyter-kernel::
+       :id: possible_first_layer_sizes-example
+
+    .. jupyter-execute::
+
+        from pprint import pprint
+        from deepcgp.utils import possible_first_layer_sizes
+
+        pprint(
+            possible_first_layer_sizes(n_encoded_colums=60, encoding_size=5)
+        )
+
+    .. jupyter-execute::
+
+        # desired_n_chunks non-exact match
+        pprint(possible_first_layer_sizes(
+            n_encoded_colums=60,
+            encoding_size=5,
+            desired_n_chunks=5
+        ))
+
+    .. jupyter-execute::
+
+        # desired_n_chunks exact match
+        pprint(possible_first_layer_sizes(
+            n_encoded_colums=60,
+            encoding_size=5,
+            desired_n_chunks=6
+        ))
+    """
+    # TODO: refact, doc, should this function returns the number of chunks too ????
+
+    # Return all numbers `possible_first_layer_size` such that:
+    #   - possible_first_layer_size is a multiple of enc_size
+    #   - possible_first_layer_size is a divisor of n_enc_cols
+
+    # Args:
+    #     n_enc_cols (int): the number that possible_first_layer_size must divide
+    #     enc_size (int): the number that possible_first_layer_size must be a multiple of
+
+    # Returns:
+    #     list[int]: all valid possible_first_layer_size values, sorted ascending
+
+    options: list[LayerSizeOption] = []
+
+    if n_encoded_colums <= 0 or encoding_size <= 0:
+        # invalid cases
+        # especially encoding_size must be positive for the while loop below
+        # to end, and != 0 for the modulo operation
+        _deepcgp_warn(
+            "possible_first_layer_sizes() called with invalid inputs, "
+            f"n_encoded_colums <= 0 ({n_encoded_colums}) or "
+            f"encoding_size <= 0 ({encoding_size}). "
+            "No valid layer sizes exist, returning an empty list."
+        )
+        return []
+
+    # possible_first_layer_size must be a multiple of enc_size,
+    # so we only need to check multiples of enc_size up to n_enc_cols
+    candidate = encoding_size
+    while candidate <= n_encoded_colums:
+        if n_encoded_colums % candidate == 0:
+            options.append(LayerSizeOption(candidate, n_encoded_colums // candidate))
+        candidate += encoding_size
+
+    if len(options) == 0 or desired_n_chunks is None:
+        return options
+
+    # by construction `options` **is sorted**
+    #  - the first elements have the lowest layer size and the hightest n_chunks
+    #  - the last elements have the highest layer size and the lowest n_chunks
+    # which make the following possible
+
+    if options[0].n_chunks <= desired_n_chunks:
+        # the largest achievable n_chunks doesn't reach desired_n_chunks
+        # or match exactly
+        return [options[0]]
+
+    if options[-1].n_chunks >= desired_n_chunks:
+        # the lowest achievable n_chunks doesn't reach desired_n_chunks
+        # or match exactly
+        # note: here desired_n_chunks would be <=1
+        return [options[-1]]
+
+    for opt in options:
+        if opt.n_chunks == desired_n_chunks:
+            return [opt]
+        if opt.n_chunks > desired_n_chunks:
+            opt_above = opt
+        else:
+            opt_below = opt
+            break
+    return [opt_above, opt_below]
