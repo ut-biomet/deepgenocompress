@@ -17,6 +17,8 @@ CompressionModel
     (Also available as ``deepcgp.CompressionModel``)
 """
 
+from __future__ import annotations
+
 import logging
 import random
 from collections.abc import Collection, Mapping
@@ -25,13 +27,13 @@ from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, TypedDict
 
 import numpy as np
 import pandas as pd
-from keras import Input, Model
-from keras.callbacks import EarlyStopping
-from keras.layers import Dense
-from keras.losses import Loss
-from keras.optimizers import Adam
 
 from .utils import encoding_size
+
+if TYPE_CHECKING:
+    from keras import Model
+    from keras.losses import Loss
+
 from numpy.typing import ArrayLike, NDArray
 from sklearn.model_selection import train_test_split
 
@@ -90,7 +92,7 @@ class LayerSizesConfigurationError(DeepcgpError):
         INVALID_LAYER_TYPE = auto()
         """Provided layer sizes values are not :class:`int`."""
 
-    _MESSAGES: ClassVar[dict["LayerSizesConfigurationError.ReasonCode", str]] = {
+    _MESSAGES: ClassVar[dict[LayerSizesConfigurationError.ReasonCode, str]] = {
         ReasonCode.INVALID_TYPE: (
             "`layer_sizes` must be a list or tuple, got a {provided_type_str}."
         ),
@@ -104,13 +106,13 @@ class LayerSizesConfigurationError(DeepcgpError):
     }
 
     class _Extra(TypedDict, total=False):
-        reason: "LayerSizesConfigurationError.ReasonCode"
+        reason: LayerSizesConfigurationError.ReasonCode
         provided_type: type
         provided_layer_sizes: list | tuple
         provided_element_type: type
         offending_index: int
 
-    extra: "_Extra | dict[str, Any]"
+    extra: _Extra | dict[str, Any]
     """Extra information related to the error.
 
     :class:`dict` with possible keys depending on the :attr:`reason`:
@@ -126,8 +128,8 @@ class LayerSizesConfigurationError(DeepcgpError):
 
     def __init__(
         self,
-        reason: "LayerSizesConfigurationError.ReasonCode",
-        extra: "LayerSizesConfigurationError._Extra | None" = None,
+        reason: LayerSizesConfigurationError.ReasonCode,
+        extra: LayerSizesConfigurationError._Extra | None = None,
     ):
         self.reason = reason
         extra = extra or {}
@@ -203,7 +205,7 @@ class NonCompressiveAutoencoderWarning(DeepcgpWarning):
     class _Extra(TypedDict, total=True):
         layer_sizes: list[int]
 
-    extra: "_Extra | dict[str, Any]"
+    extra: _Extra | dict[str, Any]
 
     def __init__(self, layer_sizes):
         super().__init__(
@@ -288,6 +290,9 @@ class AutoencoderModels:
 
     def __init__(self, layer_sizes: list[int] | tuple[int]):
         """Initialise from layers_sizes."""
+        from keras import Input, Model
+        from keras.layers import Dense
+
         _check_layer_sizes(layer_sizes)
 
         encoder_activation_functions = _default_encoder_activation_functions(
@@ -361,16 +366,16 @@ class ModelStateError(DeepcgpError):
         """:attr:`CompressionModel.is_fitted` is ``False``, so the autoencoders are not
         ready to compress data."""
 
-    _MESSAGES: ClassVar[dict["ModelStateError.ReasonCode", str]] = {
+    _MESSAGES: ClassVar[dict[ModelStateError.ReasonCode, str]] = {
         ReasonCode.NO_TRAINING_DATA: "No training data available.",
         ReasonCode.NO_LAYER_SIZES: "`layer_sizes` is not set.",
         ReasonCode.MODEL_NOT_FITTED: "Model is not fitted.",
     }
 
     class _Extra(TypedDict, total=False):
-        reason: "ModelStateError.ReasonCode"
+        reason: ModelStateError.ReasonCode
 
-    extra: "_Extra | dict[str, Any]"
+    extra: _Extra | dict[str, Any]
     """Extra information related to the error.
 
     :class:`dict` with possible keys depending on the :attr:`reason`:
@@ -382,8 +387,8 @@ class ModelStateError(DeepcgpError):
 
     def __init__(
         self,
-        reason: "ModelStateError.ReasonCode",
-        extra: "ModelStateError._Extra | None" = None,
+        reason: ModelStateError.ReasonCode,
+        extra: ModelStateError._Extra | None = None,
     ):
         self.reason = reason
         extra = extra or {}
@@ -411,7 +416,7 @@ class IncompatibleDataError(DeepcgpError):
         INVALID_COLUMN_INDEX = auto()
         """The provided DataFrame's columns do not match the training markers index."""
 
-    _MESSAGES: ClassVar[dict["IncompatibleDataError.ReasonCode", str]] = {
+    _MESSAGES: ClassVar[dict[IncompatibleDataError.ReasonCode, str]] = {
         ReasonCode.INVALID_NUMBER_OF_COLUMNS: (
             "Incompatible data. Expected {encoded_training_data_ncols} columns "
             "(from encoded training data) but provided encoded data have "
@@ -430,7 +435,7 @@ class IncompatibleDataError(DeepcgpError):
         training_data_index: pd.Index
         provided_data_index: pd.Index
 
-    extra: "_Extra | dict[str, Any]"
+    extra: _Extra | dict[str, Any]
     """Extra information related to the error.
 
     :class:`dict` with possible keys depending on the :attr:`reason`:
@@ -445,8 +450,8 @@ class IncompatibleDataError(DeepcgpError):
 
     def __init__(
         self,
-        reason: "IncompatibleDataError.ReasonCode",
-        extra: "IncompatibleDataError._Extra | None" = None,
+        reason: IncompatibleDataError.ReasonCode,
+        extra: IncompatibleDataError._Extra | None = None,
     ):
         self.reason = reason
         extra = extra or {}
@@ -473,7 +478,7 @@ class CompressionModelConfigurationError(DeepcgpError):
         MARKER_INDEX_SIZE_MISMATCH = auto()
         """Marker index length missmatch training data size."""
 
-    _MESSAGES: ClassVar[dict["CompressionModelConfigurationError.ReasonCode", str]] = {
+    _MESSAGES: ClassVar[dict[CompressionModelConfigurationError.ReasonCode, str]] = {
         ReasonCode.EMPTY_DATAFRAME: (
             "`training_dataframe` is empty. Provide a DataFrame compatible with "
             "at least one row and one column."
@@ -487,12 +492,12 @@ class CompressionModelConfigurationError(DeepcgpError):
     }
 
     class _Extra(TypedDict, total=False):
-        reason: "CompressionModelConfigurationError.ReasonCode"
+        reason: CompressionModelConfigurationError.ReasonCode
         encoded_training_data_ncols: int
         encoding_size: int
         markers_index: pd.Index
 
-    extra: "_Extra | dict[str, Any]"
+    extra: _Extra | dict[str, Any]
     """Extra information related to the error.
 
     :class:`dict` with possible keys depending on the :attr:`reason`:
@@ -506,8 +511,8 @@ class CompressionModelConfigurationError(DeepcgpError):
 
     def __init__(
         self,
-        reason: "CompressionModelConfigurationError.ReasonCode",
-        extra: "CompressionModelConfigurationError._Extra | None" = None,
+        reason: CompressionModelConfigurationError.ReasonCode,
+        extra: CompressionModelConfigurationError._Extra | None = None,
     ):
         self.reason = reason
         extra = extra or {}
@@ -625,7 +630,7 @@ class ColumnPaddingWarning(DeepcgpWarning):
         first_layer_size: int
         n_encoded_cols: int
 
-    extra: "_Extra | dict[str, Any]"
+    extra: _Extra | dict[str, Any]
 
     def __init__(self, first_layer_size, n_encoded_cols):
         super().__init__(
@@ -709,7 +714,7 @@ class IncompleteEncodingChunkWarning(DeepcgpWarning):
         first_layer_size: int
         encoding_size: int
 
-    extra: "_Extra | dict[str, Any]"
+    extra: _Extra | dict[str, Any]
 
     def __init__(self, first_layer_size, encoding_size):
         super().__init__(
@@ -753,7 +758,7 @@ class LessThanOneAlleleChunks(DeepcgpWarning):
         first_layer_size: int
         encoding_size: int
 
-    extra: "_Extra | dict[str, Any]"
+    extra: _Extra | dict[str, Any]
 
     def __init__(self, first_layer_size, encoding_size):
         super().__init__(
@@ -1302,6 +1307,8 @@ class CompressionModel:
         validation_size: int | float = 0.5,
     ):
         """Initialise compression model."""
+        from keras.callbacks import EarlyStopping
+
         self._training_encoded_geno_array = None
         self._layer_sizes = []
         self._training_markers_index = None
@@ -1453,6 +1460,8 @@ class CompressionModel:
             - If :attr:`CompressionModel.training_encoded_geno_array` is ``None``.
             - If :attr:`CompressionModel.layer_sizes` is not set.
         """
+        from keras.optimizers import Adam
+
         if self.training_encoded_geno_array is None:
             raise ModelStateError(reason=ModelStateError.ReasonCode.NO_TRAINING_DATA)
 
