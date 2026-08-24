@@ -7,16 +7,11 @@
 format:
 	git ls-files -- "*.py" | xargs isort --profile black
 	git ls-files -- "*.py" | xargs black
-	# docformatter exit with 3 when reformatting a file, which make xargs fail with 123
-	git ls-files -- "*.py" | xargs docformatter --in-place || [ $$? -eq 123 ]
-	# rerun docformatter without catching 123 to catch possible other errors
-	git ls-files -- "*.py" | xargs docformatter --in-place
 	command -v nixfmt >/dev/null 2>&1 && git ls-files -- "*.nix" | xargs nixfmt || true
 
 format-check:
 	git ls-files -- "*.py" | xargs isort --profile black --check --diff
 	git ls-files -- "*.py" | xargs black --check --diff
-	git ls-files -- "*.py" | xargs docformatter --check
 	git ls-files -- "*.nix" | xargs nixfmt --check
 
 python_checks:

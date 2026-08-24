@@ -1,0 +1,37 @@
+"""Public exception hierarchy for deepcgp.
+
+All exceptions raised by deepcgp inherit from :class:`DeepcgpError`, allowing
+callers to catch any package-specific error with a single ``except`` clause.
+Specific exceptions are defined alongside the code that raises them (see each
+class's source module), and re-exported here to provide a single, stable
+import location.
+
+Examples
+--------
+.. jupyter-execute::
+
+    from deepcgp.exceptions import DeepcgpError
+
+    try:
+        ...
+    except DeepcgpError as e:
+        print(f"deepcgp failed: {e}")
+"""
+
+from deepcgp._base_exceptions import DeepcgpError
+from deepcgp.compression import (
+    CompressionModelConfigurationError,
+    IncompatibleDataError,
+    LayerSizesConfigurationError,
+    ModelStateError,
+)
+from deepcgp.data_processing import InvalidEncodingMapError
+
+__all__ = [
+    "CompressionModelConfigurationError",
+    "DeepcgpError",
+    "IncompatibleDataError",
+    "InvalidEncodingMapError",
+    "LayerSizesConfigurationError",
+    "ModelStateError",
+]

@@ -23,6 +23,22 @@ from deepcgp.data_processing import (
     build_one_hot_encoding_map,
     encode_snp_array,
 )
+from deepcgp.exceptions import (
+    CompressionModelConfigurationError,
+    DeepcgpError,
+    IncompatibleDataError,
+    InvalidEncodingMapError,
+    LayerSizesConfigurationError,
+    ModelStateError,
+)
+from deepcgp.warnings import (
+    AllZerosEncodedWarning,
+    ColumnPaddingWarning,
+    DeepcgpWarning,
+    IncompleteEncodingChunkWarning,
+    LessThanOneAlleleChunks,
+    NonCompressiveAutoencoderWarning,
+)
 
 LAYER_SIZES_CASES = [
     pytest.param([32, 16, 8, 4], id="2-encoding-layers"),
@@ -39,6 +55,296 @@ def layer_sizes(request):
 @pytest.fixture
 def basic_autoencoder_models(layer_sizes):
     return AutoencoderModels(layer_sizes)
+
+
+class TestNonCompressiveAutoencoderWarning:
+    def test_warning_is_DeepcgpWarning(self):
+        assert issubclass(NonCompressiveAutoencoderWarning, DeepcgpWarning)
+
+    def test_warning_message(self):
+        expected_msg = (
+            "Latent layer size (10) is equal or larger than "
+            "the input layer size (9). This will expand rather "
+            "than compress the data."
+        )
+        warn = NonCompressiveAutoencoderWarning([9, 8, 10])
+
+        assert expected_msg in str(warn)
+
+    def test_warning_extra(self):
+        warn = NonCompressiveAutoencoderWarning([9, 8, 10])
+
+        assert warn.extra["layer_sizes"] == [9, 8, 10]
+
+
+class TestColumnPaddingWarning:
+    def test_warning_is_DeepcgpWarning(self):
+        assert issubclass(ColumnPaddingWarning, DeepcgpWarning)
+
+    def test_warning_message(self):
+        expected_msg = (
+            "layer_sizes[0]=50 is not a divisor of the number of encoded columns (75). "
+            "Column padding (filled with 0) will be added to the end of the data "
+            "to fit requested input layer size."
+        )
+        warn = ColumnPaddingWarning(first_layer_size=50, n_encoded_cols=75)
+
+        assert expected_msg in str(warn)
+
+    def test_warning_extra(self):
+        warn = ColumnPaddingWarning(first_layer_size=50, n_encoded_cols=75)
+
+        assert warn.extra["first_layer_size"] == 50
+        assert warn.extra["n_encoded_cols"] == 75
+
+
+class TestIncompleteEncodingChunkWarning:
+    def test_warning_is_DeepcgpWarning(self):
+        assert issubclass(IncompleteEncodingChunkWarning, DeepcgpWarning)
+
+    def test_warning_message(self):
+        expected_msg = (
+            "layer_sizes[0]=50 is not a multiple of encoding_size=13. (ie. each "
+            "chunk will cut through encoded alleles, leaving incomplete encodings "
+            "at chunk edges)"
+        )
+        warn = IncompleteEncodingChunkWarning(first_layer_size=50, encoding_size=13)
+
+        assert expected_msg in str(warn)
+
+    def test_warning_extra(self):
+        warn = IncompleteEncodingChunkWarning(first_layer_size=50, encoding_size=13)
+
+        assert warn.extra["first_layer_size"] == 50
+        assert warn.extra["encoding_size"] == 13
+
+
+class TestLessThanOneAlleleChunks:
+    def test_warning_is_DeepcgpWarning(self):
+        assert issubclass(LessThanOneAlleleChunks, DeepcgpWarning)
+
+    def test_warning_message(self):
+        expected_msg = (
+            "layer_sizes[0]=10 is lower or equal to "
+            "`encoding_size` (50) (ie. each chunk will consist of 1 or "
+            "less encoded allele)."
+        )
+        warn = LessThanOneAlleleChunks(first_layer_size=10, encoding_size=50)
+
+        assert expected_msg in str(warn)
+
+    def test_warning_extra(self):
+        warn = LessThanOneAlleleChunks(first_layer_size=10, encoding_size=50)
+
+        assert warn.extra["first_layer_size"] == 10
+        assert warn.extra["encoding_size"] == 50
+
+
+class TestLayerSizesConfigurationError:
+    def test_error_is_DeepcgpError(self):
+        assert issubclass(LayerSizesConfigurationError, DeepcgpError)
+
+    def test_all_reason_codes_have_a_message(self):
+        assert set(LayerSizesConfigurationError._MESSAGES) == set(
+            LayerSizesConfigurationError.ReasonCode
+        )
+
+    @pytest.mark.parametrize(
+        "reason, extra, expected_msg",
+        [
+            (
+                LayerSizesConfigurationError.ReasonCode.INVALID_TYPE,
+                {"provided_type": dict},
+                "`layer_sizes` must be a list or tuple, got a dict.",
+            ),
+            (
+                LayerSizesConfigurationError.ReasonCode.TOO_FEW_LAYERS,
+                {"provided_layer_sizes": [42]},
+                "`layer_sizes` length must be at least 2, got 1.",
+            ),
+            (
+                LayerSizesConfigurationError.ReasonCode.INVALID_LAYER_TYPE,
+                {
+                    "provided_element_type": float,
+                    "offending_index": 2,
+                },
+                (
+                    "`layer_sizes` must be a list or tuple of int, got "
+                    "`float` at index 2."
+                ),
+            ),
+        ],
+        ids=[
+            "INVALID_TYPE",
+            "TOO_FEW_LAYERS",
+            "INVALID_LAYER_TYPE",
+        ],
+    )
+    def test_error_messages_and_extra(self, reason, extra, expected_msg):
+        err = LayerSizesConfigurationError(
+            reason=reason,
+            extra=extra,
+        )
+        assert "reason" in err.extra
+        assert err.extra["reason"] is reason
+
+        if extra is not None:
+            for k, v in extra.items():
+                assert k in err.extra
+                assert v == err.extra[k]
+
+        assert expected_msg in str(err)
+
+
+class TestModelStateError:
+    def test_error_is_DeepcgpError(self):
+        assert issubclass(ModelStateError, DeepcgpError)
+
+    def test_all_reason_codes_have_a_message(self):
+        assert set(ModelStateError._MESSAGES) == set(ModelStateError.ReasonCode)
+
+    @pytest.mark.parametrize(
+        "reason, extra, expected_msg",
+        [
+            (
+                ModelStateError.ReasonCode.NO_TRAINING_DATA,
+                None,
+                "No training data available.",
+            ),
+            (
+                ModelStateError.ReasonCode.NO_LAYER_SIZES,
+                None,
+                "`layer_sizes` is not set.",
+            ),
+            (ModelStateError.ReasonCode.MODEL_NOT_FITTED, None, "Model is not fitted."),
+        ],
+        ids=["NO_TRAINING_DATA", "NO_LAYER_SIZES", "MODEL_NOT_FITTED"],
+    )
+    def test_error_messages_and_extra(self, reason, extra, expected_msg):
+        err = ModelStateError(
+            reason=reason,
+            extra=extra,
+        )
+        assert "reason" in err.extra
+        assert err.extra["reason"] is reason
+
+        if extra is not None:
+            for k, v in extra.items():
+                assert k in err.extra
+                assert v == err.extra[k]
+
+        assert expected_msg in str(err)
+
+
+class TestIncompatibleDataError:
+    def test_error_is_DeepcgpError(self):
+        assert issubclass(IncompatibleDataError, DeepcgpError)
+
+    def test_all_reason_codes_have_a_message(self):
+        assert set(IncompatibleDataError._MESSAGES) == set(
+            IncompatibleDataError.ReasonCode
+        )
+
+    @pytest.mark.parametrize(
+        "reason, extra, expected_msg",
+        [
+            (
+                IncompatibleDataError.ReasonCode.INVALID_NUMBER_OF_COLUMNS,
+                {"encoded_provided_data_ncols": 42, "encoded_training_data_ncols": 10},
+                (
+                    "Incompatible data. Expected 10 columns (from encoded training "
+                    "data) but provided encoded data have 42 columns. Ensure the input "
+                    "is encoded with the same encoding map and contains the same "
+                    "markers as the training data."
+                ),
+            ),
+            (
+                IncompatibleDataError.ReasonCode.INVALID_COLUMN_INDEX,
+                {
+                    "training_data_index": pd.Index(["a", "b", "c"]),
+                    "provided_data_index": pd.Index(["z", "y", "x"]),
+                },
+                (
+                    "Incompatible data. Provided DataFrame columns do not match "
+                    "training markers index."
+                ),
+            ),
+        ],
+        ids=["INVALID_NUMBER_OF_COLUMNS", "INVALID_COLUMN_INDEX"],
+    )
+    def test_error_messages_and_extra(self, reason, extra, expected_msg):
+        err = IncompatibleDataError(
+            reason=reason,
+            extra=extra,
+        )
+        assert "reason" in err.extra
+        assert err.extra["reason"] is reason
+
+        if extra is not None:
+            for k, v in extra.items():
+                assert k in err.extra
+                if isinstance(v, pd.Index):
+                    assert (v == err.extra[k]).all()
+                else:
+                    assert v == err.extra[k]
+
+        assert expected_msg in str(err)
+
+
+class TestCompressionModelConfigurationError:
+
+    def test_error_is_DeepcgpError(self):
+        assert issubclass(CompressionModelConfigurationError, DeepcgpError)
+
+    def test_all_reason_codes_have_a_message(self):
+        assert set(CompressionModelConfigurationError._MESSAGES) == set(
+            CompressionModelConfigurationError.ReasonCode
+        )
+
+    @pytest.mark.parametrize(
+        "reason, extra, expected_msg",
+        [
+            (
+                CompressionModelConfigurationError.ReasonCode.EMPTY_DATAFRAME,
+                None,
+                (
+                    "`training_dataframe` is empty. Provide a DataFrame compatible "
+                    "with at least one row and one column."
+                ),
+            ),
+            (
+                CompressionModelConfigurationError.ReasonCode.MARKER_INDEX_SIZE_MISMATCH,
+                {
+                    "encoded_training_data_ncols": 20,
+                    "encoding_size": 2,
+                    "markers_index": pd.Index(["a", "b", "c"]),
+                },
+                (
+                    "Marker index length missmatch training data size. "
+                    "Marker index has 3 markers, but the encoded training genotype "
+                    "array implies 10 markers (20 columns / encoding size 2)."
+                ),
+            ),
+        ],
+        ids=["EMPTY_DATAFRAME", "MARKER_INDEX_SIZE_MISMATCH"],
+    )
+    def test_error_messages_and_extra(self, reason, extra, expected_msg):
+        err = CompressionModelConfigurationError(
+            reason=reason,
+            extra=extra,
+        )
+        assert "reason" in err.extra
+        assert err.extra["reason"] is reason
+
+        if extra is not None:
+            for k, v in extra.items():
+                assert k in err.extra
+                if isinstance(v, pd.Index):
+                    assert (v == err.extra[k]).all()
+                else:
+                    assert v == err.extra[k]
+
+        assert expected_msg in str(err)
 
 
 class TestAutoencoderModels:
@@ -114,119 +420,71 @@ class TestAutoencoderModels:
         assert aem.autoencoder.output_shape == (None, layer_sizes[0])
 
     def test_input_dim_one(self):
-        with pytest.warns(
-            UserWarning,
-            match=(
-                r"Latent layer size \(\d+\) is equal or "
-                r"larger than the input layer size \(1\)"
-            ),
-        ):
+        with pytest.warns(NonCompressiveAutoencoderWarning):
             aem = AutoencoderModels([1, 16, 8, 4])
         assert aem.autoencoder.input_shape == (None, 1)
         assert aem.autoencoder.output_shape == (None, 1)
 
     def test_no_compression(self):
-        with pytest.warns(
-            UserWarning,
-            match=(
-                r"Latent layer size \(\d+\) is equal or "
-                r"larger than the input layer size \(\d+\)"
-            ),
-        ):
+        with pytest.warns(NonCompressiveAutoencoderWarning):
             aem = AutoencoderModels([10, 10, 10, 10])
         assert aem.encoder.output_shape == (None, 10)
         assert aem.autoencoder.output_shape == (None, 10)
 
     def test_raise_if_layer_sizes_is_string(self):
-        with pytest.raises(
-            TypeError,
-            match="layer_sizes must be a list, or tuple of int got `<class 'str'>`",
-        ):
+        with pytest.raises(LayerSizesConfigurationError) as err_info:
             AutoencoderModels("987")  # pyright: ignore [reportArgumentType]
 
+        err = err_info.value
+        assert "reason" in err.extra
+        assert (
+            err.extra["reason"] == LayerSizesConfigurationError.ReasonCode.INVALID_TYPE
+        )
+
+        assert "provided_type" in err.extra
+        assert err.extra["provided_type"] == str  # noqa: E721
+
     def test_raise_if_layer_sizes_lenght_is_lower_than_2(self):
-        with pytest.raises(
-            ValueError,
-            match=re.escape(
-                "layer_sizes length must be greater than 2, got `len(layer_sizes)=1`"
-            ),
-        ):
+        with pytest.raises(LayerSizesConfigurationError) as err_info:
             AutoencoderModels([42])
 
+        err = err_info.value
+        assert "reason" in err.extra
+        assert (
+            err.extra["reason"]
+            == LayerSizesConfigurationError.ReasonCode.TOO_FEW_LAYERS
+        )
+
+        assert "provided_layer_sizes" in err.extra
+        assert err.extra["provided_layer_sizes"] == [42]
+
     def test_raise_if_layers_sizes_are_not_integers(self):
-        with pytest.raises(
-            ValueError,
-            match=re.escape(
-                "layer_sizes must be a list, or tuple of int got `<class 'float'>` "
-                "for index layers_sizes[1]."
-            ),
-        ):
+        with pytest.raises(LayerSizesConfigurationError) as err_info:
             AutoencoderModels([42, 3.5])  # pyright: ignore [reportArgumentType]
+
+        err = err_info.value
+        assert "reason" in err.extra
+        assert (
+            err.extra["reason"]
+            == LayerSizesConfigurationError.ReasonCode.INVALID_LAYER_TYPE
+        )
+
+        assert "offending_index" in err.extra
+        assert err.extra["offending_index"] == 1
+
+        assert "provided_element_type" in err.extra
+        assert err.extra["provided_element_type"] == float  # noqa: E721
 
     def test_is_fitted_is_false(self):
         assert not AutoencoderModels([4, 3, 2]).is_fitted
 
     def test_raise_warning_if_latent_size_equal_input_size(self):
-        with pytest.warns(
-            UserWarning,
-            match=r"is equal or larger than",
-        ) as warn_info:
+        with pytest.warns(NonCompressiveAutoencoderWarning):
             AutoencoderModels([4, 3, 4])
 
-        expected_message = (
-            "Latent layer size (4) is equal or larger than "
-            "the input layer size (4). This will expand rather "
-            "than compress the data."
-        )
-        assert str(warn_info[0].message) == expected_message
-
     def test_raise_warning_if_latent_size_larger_than_input_size(self):
-        with pytest.warns(
-            UserWarning,
-            match=r"is equal or larger than",
-        ) as warn_info:
+        with pytest.warns(NonCompressiveAutoencoderWarning):
             AutoencoderModels([5, 7, 8])
-
-        expected_message = (
-            "Latent layer size (8) is equal or larger than "
-            "the input layer size (5). This will expand rather "
-            "than compress the data."
-        )
-        assert str(warn_info[0].message) == expected_message
-
-    def test_warning_when_enlarging_data(self):
-        with pytest.warns(
-            UserWarning,
-            match=(
-                r"Latent layer size \(\d+\) is equal or "
-                r"larger than the input layer size \(\d+\)"
-            ),
-        ) as warn_info:
-            AutoencoderModels([1, 5, 3])
-
-        expected_message = (
-            "Latent layer size (3) is equal or larger than "
-            "the input layer size (1). This will expand rather "
-            "than compress the data."
-        )
-        assert str(warn_info[0].message) == expected_message
-
-    def test_warning_when_data_size_remains_the_same(self):
-        with pytest.warns(
-            UserWarning,
-            match=(
-                r"Latent layer size \(\d+\) is equal or "
-                r"larger than the input layer size \(\d+\)"
-            ),
-        ) as warn_info:
-            AutoencoderModels([7, 3, 7])
-
-        expected_message = (
-            "Latent layer size (7) is equal or larger than "
-            "the input layer size (7). This will expand rather "
-            "than compress the data."
-        )
-        assert str(warn_info[0].message) == expected_message
 
 
 @dataclass
@@ -327,23 +585,12 @@ class Test_check_layer_size_and_encoded_data_size:
         assert _check_layer_size_and_encoded_data_size(8, 8) is None
 
     def test_warn_when_n_cols_is_not_divisible_by_first_layer_size(self):
-        with pytest.warns(UserWarning, match="is not a divisor of n_cols"):
+        with pytest.warns(ColumnPaddingWarning):
             _check_layer_size_and_encoded_data_size(10, 3)
 
     def test_warn_when_n_cols_is_lower_than_first_layer_size(self):
-        with pytest.warns(UserWarning, match="is not a divisor of n_cols"):
+        with pytest.warns(ColumnPaddingWarning):
             _check_layer_size_and_encoded_data_size(5, 10)
-
-    def test_warning_message(self):
-        with pytest.warns(UserWarning, match="is not a divisor of n_cols") as warn_info:
-            _check_layer_size_and_encoded_data_size(13, 7)
-
-        expected_message = (
-            "layer_sizes[0]=7 is not a divisor of n_cols=13. "
-            "Column padding (filled with 0) will be added to the end of the data "
-            "to fit requested layer_sizes[0]"
-        )
-        assert str(warn_info[0].message) == expected_message
 
 
 class Test_check_layer_size_and_encoding_compatibility:
@@ -351,36 +598,16 @@ class Test_check_layer_size_and_encoding_compatibility:
         assert _check_layer_size_and_encoding_compatibility(10, 5) is None
 
     def test_warn_when_encoding_size_equals_first_layer(self):
-        with pytest.warns(
-            UserWarning,
-            match=r"layer_sizes\[0\]=8 is equal to `encoding_size`.",
-        ) as warn_info:
+        with pytest.warns(LessThanOneAlleleChunks):
             assert _check_layer_size_and_encoding_compatibility(8, 8) is None
 
-        expected_message = (
-            "layer_sizes[0]=8 is equal to `encoding_size` "
-            "(ie. each chunk will consist of only 1 encoded allele)."
-        )
-        assert str(warn_info[0].message) == expected_message
-
     def test_warns_when_encoding_size_not_multiple_of_n_cols(self):
-        with pytest.warns(UserWarning, match="is not a multiple of"):
+        with pytest.warns(IncompleteEncodingChunkWarning):
             _check_layer_size_and_encoding_compatibility(10, 3)
 
     def test_warns_when_encoding_size_larger_than_first_layer(self):
-        with pytest.warns(UserWarning, match="is not a multiple of"):
+        with pytest.warns((LessThanOneAlleleChunks, IncompleteEncodingChunkWarning)):
             _check_layer_size_and_encoding_compatibility(10, 20)
-
-    def test_warning_message(self):
-        with pytest.warns(UserWarning, match=r"is not a multiple of") as warn_info:
-            _check_layer_size_and_encoding_compatibility(10, 7)
-
-        expected_message = (
-            "layer_sizes[0]=10 is not a multiple of encoding_size=7. "
-            "(ie. each chunk will cut through encoded alleles, "
-            "leaving incomplete encodings at chunk edges)"
-        )
-        assert str(warn_info[0].message) == expected_message
 
 
 class Test_split_data:
@@ -454,7 +681,7 @@ class Test_split_data:
         n_cols = training_data_requiring_padding.encoded_array.shape[1]
         chunk_size = training_data_requiring_padding.layer_sizes[0]
 
-        with pytest.warns(UserWarning):
+        with pytest.warns(ColumnPaddingWarning):
             result = _split_data(
                 training_data_requiring_padding.encoded_array,
                 training_data_requiring_padding.layer_sizes[0],
@@ -564,17 +791,14 @@ class TestCompressionModel_basic_initialisation:
         ],
     )
     def test_raises_with_invalid_layer_sizes(self, bad_layer_sizes):
-        with pytest.raises(ValueError):
+        with pytest.raises(LayerSizesConfigurationError):
             CompressionModel(layer_sizes=bad_layer_sizes)
 
     def test_warns_with_incompatible_layer_size_and_data(
         self,
         basic_training_data: TrainingDataFixture,
     ):
-        with pytest.warns(
-            UserWarning,
-            match="is not a divisor of n_cols",
-        ):
+        with pytest.warns(ColumnPaddingWarning):
             CompressionModel(
                 training_encoded_geno_array=basic_training_data.encoded_array,
                 layer_sizes=[7, 3, 1],
@@ -583,15 +807,32 @@ class TestCompressionModel_basic_initialisation:
     def test_raise_with_incompatible_index_and_training_data(
         self, basic_training_data: TrainingDataFixture
     ):
-        with pytest.raises(
-            ValueError,
-            match=r"Marker index length missmatch training data size",
-        ):
+        with pytest.raises(CompressionModelConfigurationError) as err_info:
             CompressionModel(
                 training_encoded_geno_array=basic_training_data.encoded_array,
                 encoding_map=basic_training_data.encoding_map,
                 training_markers_index=["A", "B"],
             )
+        err = err_info.value
+
+        assert (
+            err.reason
+            == CompressionModelConfigurationError.ReasonCode.MARKER_INDEX_SIZE_MISMATCH
+        )
+
+        assert "encoded_training_data_ncols" in err.extra
+        assert (
+            err.extra["encoded_training_data_ncols"]
+            == basic_training_data.encoded_array.shape[1]
+        )
+
+        assert "encoding_size" in err.extra
+        assert err.extra["encoding_size"] == len(
+            next(iter(basic_training_data.encoding_map.values()))
+        )
+
+        assert "markers_index" in err.extra
+        assert (err.extra["markers_index"] == pd.Index(["A", "B"])).all()
 
 
 class TestCompressionModel_initialisation_from_dataframe:
@@ -740,14 +981,13 @@ class TestCompressionModel_initialisation_from_dataframe:
     def test_raise_with_empty_dataframe(self):
         geno_data = pd.DataFrame()
 
-        with pytest.raises(
-            ValueError,
-            match=re.escape(
-                "`training_dataframe` is empty. Provide a DataFrame with at least "
-                "one row and one column."
-            ),
-        ):
+        with pytest.raises(CompressionModelConfigurationError) as err_info:
             CompressionModel.from_dataframe(training_dataframe=geno_data)
+
+        err = err_info.value
+        assert (
+            err.reason == CompressionModelConfigurationError.ReasonCode.EMPTY_DATAFRAME
+        )
 
     def test_training_markers_index_is_correctly_set(
         self, basic_training_data: TrainingDataFixture
@@ -784,10 +1024,10 @@ class TestCompressionModel_initialisation_from_dataframe:
         self, basic_training_data: TrainingDataFixture
     ):
         with pytest.raises(
-            ValueError,
+            TypeError,
             match=re.escape(
                 "`training_encoded_geno_array` cannot be passed as a keyword argument "
-                "to from_dataframe(); it is derived from `training_dataframe`."
+                "it is derived from `training_dataframe`."
             ),
         ):
             CompressionModel.from_dataframe(
@@ -801,13 +1041,7 @@ class TestCompressionModel_initialisation_from_dataframe:
             "Z": [0.0, 1.0],
         }
 
-        with pytest.warns(
-            UserWarning,
-            match=(
-                "The encoded array contains only zeros. This may indicate that all "
-                "values in geno_array are missing or not present in encoding_map."
-            ),
-        ):
+        with pytest.warns(AllZerosEncodedWarning):
             cm = CompressionModel.from_dataframe(
                 training_dataframe=basic_training_data.dataframe,
                 encoding_map=encoding_map,
@@ -815,13 +1049,7 @@ class TestCompressionModel_initialisation_from_dataframe:
             )
 
         # correct encoding
-        with pytest.warns(
-            UserWarning,
-            match=(
-                "The encoded array contains only zeros. This may indicate that all "
-                "values in geno_array are missing or not present in encoding_map."
-            ),
-        ):
+        with pytest.warns(AllZerosEncodedWarning):
             expected_encoded_array = encode_snp_array(
                 basic_training_data.dataframe.to_numpy(),
                 missing_values=missing_values,
@@ -842,15 +1070,11 @@ class TestCompressionModel_initialisation_from_dataframe:
         # Just a smoke test, full validation done is done in
         # TestCompressionModel_layer_sizes and
         # TestCompressionModel_training_encoded_geno_array
-        with pytest.warns(UserWarning) as warnings:
+        with pytest.warns((ColumnPaddingWarning, IncompleteEncodingChunkWarning)):
             CompressionModel.from_dataframe(
                 training_dataframe=basic_training_data.dataframe,
                 layer_sizes=[7, 3, 1],
             )
-
-        messages = [str(w.message) for w in warnings]
-        assert any("is not a multiple of encoding_size" in m for m in messages)
-        assert any("is not a divisor of n_cols" in m for m in messages)
 
 
 class TestCompressionModel_layer_sizes:
@@ -865,10 +1089,15 @@ class TestCompressionModel_layer_sizes:
         cm = CompressionModel(
             training_encoded_geno_array=basic_training_data.encoded_array
         )
-        with pytest.warns(
-            UserWarning,
-            match="is not a divisor of n_cols",
-        ):
+        with pytest.warns(ColumnPaddingWarning):
+            cm.layer_sizes = [7, 3, 1]
+
+    def test_setter_warn_when_incompatible_with_encoding_size(
+        self,
+        basic_training_data: TrainingDataFixture,
+    ):
+        cm = CompressionModel(encoding_map=basic_training_data.encoding_map)
+        with pytest.warns(IncompleteEncodingChunkWarning):
             cm.layer_sizes = [7, 3, 1]
 
 
@@ -879,10 +1108,7 @@ class TestCompressionModel_training_encoded_geno_array:
         default_compression_model: CompressionModel,
     ):
         default_compression_model.layer_sizes = [7, 3, 1]
-        with pytest.warns(
-            UserWarning,
-            match="is not a divisor of n_cols",
-        ):
+        with pytest.warns(ColumnPaddingWarning):
             default_compression_model.training_encoded_geno_array = (
                 basic_training_data.encoded_array
             )
@@ -894,11 +1120,27 @@ class TestCompressionModel_training_encoded_geno_array:
             encoding_map=basic_training_data.encoding_map,
             training_markers_index=["A", "B"],
         )
-        with pytest.raises(
-            ValueError,
-            match=r"Marker index length missmatch training data size",
-        ):
+
+        with pytest.raises(CompressionModelConfigurationError) as err_info:
             cm.training_encoded_geno_array = basic_training_data.encoded_array
+        err = err_info.value
+
+        assert (
+            err.reason
+            == CompressionModelConfigurationError.ReasonCode.MARKER_INDEX_SIZE_MISMATCH
+        )
+
+        assert "encoded_training_data_ncols" in err.extra
+        assert (
+            err.extra["encoded_training_data_ncols"]
+            == basic_training_data.encoded_array.shape[1]
+        )
+
+        assert "encoding_size" in err.extra
+        assert err.extra["encoding_size"] == cm.encoding_size
+
+        assert "markers_index" in err.extra
+        assert (err.extra["markers_index"] == cm.training_markers_index).all()
 
     def test_reset(self, initialised_compression_model: CompressionModel):
         cm = initialised_compression_model
@@ -934,14 +1176,27 @@ class TestCompressionModel_training_markers_index:
         assert training_markers_index.equals(pd.Index(index_of_various_types))
 
     def test_setter_raise_if_incompatible_with_training_data(
-        self, initialised_compression_model, index_of_various_types
+        self, initialised_compression_model: CompressionModel, index_of_various_types
     ):
         cm = initialised_compression_model
-        with pytest.raises(
-            ValueError,
-            match=r"Marker index length missmatch training data size",
-        ):
+
+        with pytest.raises(CompressionModelConfigurationError) as err_info:
             cm.training_markers_index = index_of_various_types
+        err = err_info.value
+
+        assert (
+            err.reason
+            == CompressionModelConfigurationError.ReasonCode.MARKER_INDEX_SIZE_MISMATCH
+        )
+
+        assert "encoded_training_data_ncols" in err.extra
+        assert err.extra["encoded_training_data_ncols"] == cm._n_col_train
+
+        assert "encoding_size" in err.extra
+        assert err.extra["encoding_size"] == cm.encoding_size
+
+        assert "markers_index" in err.extra
+        assert (err.extra["markers_index"] == index_of_various_types).all()
 
     def test_reset(self, initialised_compression_model: CompressionModel):
         cm = initialised_compression_model
@@ -954,8 +1209,11 @@ class TestCompressionModel_training_markers_index:
 class TestCompressionModel_encoding_map:
     def test_setter_validate_map(self):
         cm = CompressionModel()
-        with pytest.raises(ValueError, match=r"`encoding_map` is empty."):
+        with pytest.raises(InvalidEncodingMapError) as err_info:
             cm.encoding_map = {}
+
+        err = err_info.value
+        assert err.reason == InvalidEncodingMapError.ReasonCode.EMPTY_ENCODING_MAP
 
     def test_setter_warns_with_incompatible_layer_size(
         self, basic_training_data: TrainingDataFixture
@@ -968,10 +1226,7 @@ class TestCompressionModel_encoding_map:
         # n_cols (24) is divisible by 3 (8 markers).
         # but chunk_size (8) is not a multiple of 3.
         bad_encoding_map = {"A": [1.0, 0.0, 0.0]}
-        with pytest.warns(
-            UserWarning,
-            match="is not a multiple of encoding_size",
-        ):
+        with pytest.warns(IncompleteEncodingChunkWarning):
             cm.encoding_map = bad_encoding_map
 
     def test_setter_raise_with_incompatible_marker_index(
@@ -986,10 +1241,23 @@ class TestCompressionModel_encoding_map:
         # Encoding map with size 2.
         # Expected markers = 24/2 = 12 != 6
         bad_encoding_map = {"A": [0.0, 0.0]}
-        with pytest.raises(
-            ValueError, match=r"Marker index length missmatch training data size"
-        ):
+        with pytest.raises(CompressionModelConfigurationError) as err_info:
             cm.encoding_map = bad_encoding_map
+        err = err_info.value
+
+        assert (
+            err.reason
+            == CompressionModelConfigurationError.ReasonCode.MARKER_INDEX_SIZE_MISMATCH
+        )
+
+        assert "encoded_training_data_ncols" in err.extra
+        assert err.extra["encoded_training_data_ncols"] == cm._n_col_train
+
+        assert "encoding_size" in err.extra
+        assert err.extra["encoding_size"] == len(next(iter(bad_encoding_map.values())))
+
+        assert "markers_index" in err.extra
+        assert (err.extra["markers_index"] == cm.training_markers_index).all()
 
     def test_reset(self, initialised_compression_model: CompressionModel):
         cm = initialised_compression_model
@@ -1003,21 +1271,25 @@ class TestCompressionModel_fit:
     def test_raise_with_no_training_data_and_no_layer_sizes(
         self, default_compression_model: CompressionModel
     ):
-        with pytest.raises(
-            RuntimeError,
-            match=r"No training data available\.",
-        ):
+        with pytest.raises(ModelStateError) as err_info:
             default_compression_model.fit()
+        err = err_info.value
+
+        assert (
+            err.reason == ModelStateError.ReasonCode.NO_TRAINING_DATA
+            or err.reason == ModelStateError.ReasonCode.NO_LAYER_SIZES
+        )
 
     def test_raise_with_no_training_data(
         self, default_compression_model: CompressionModel
     ):
         default_compression_model.layer_sizes = [8, 4, 2]
-        with pytest.raises(
-            RuntimeError,
-            match=r"No training data available\.",
-        ):
+
+        with pytest.raises(ModelStateError) as err_info:
             default_compression_model.fit()
+        err = err_info.value
+
+        assert err.reason == ModelStateError.ReasonCode.NO_TRAINING_DATA
 
     def test_raise_with_no_layer_sizes(
         self,
@@ -1027,11 +1299,11 @@ class TestCompressionModel_fit:
         default_compression_model.training_encoded_geno_array = (
             basic_training_data.encoded_array
         )
-        with pytest.raises(
-            RuntimeError,
-            match=r"layer_sizes is not set\.",
-        ):
+        with pytest.raises(ModelStateError) as err_info:
             default_compression_model.fit()
+        err = err_info.value
+
+        assert err.reason == ModelStateError.ReasonCode.NO_LAYER_SIZES
 
     def test_is_fitted_becomes_true(self, fitted_compression_model: CompressionModel):
         assert fitted_compression_model.is_fitted
@@ -1260,23 +1532,34 @@ class TestCompressionModel_compress:
         default_compression_model: CompressionModel,
         basic_training_data: TrainingDataFixture,
     ):
-        with pytest.raises(
-            RuntimeError,
-            match=r"Model is not fitted\.",
-        ):
+        with pytest.raises(ModelStateError) as err_info:
             default_compression_model.compress(basic_training_data.encoded_array)
+        err = err_info.value
+
+        assert err.reason == ModelStateError.ReasonCode.MODEL_NOT_FITTED
 
     def test_raise_when_n_cols_do_not_match_training_data(
         self,
         fitted_compression_model: CompressionModel,
     ):
-        with pytest.raises(
-            ValueError,
-            match=(
-                r"^Incompatible data. Provided data have a different number of columns "
-            ),
-        ):
+        with pytest.raises(IncompatibleDataError) as err_info:
             fitted_compression_model.compress(np.array([[1, 0, 0, 1, 0, 0]]))
+
+        err = err_info.value
+        assert "reason" in err.extra
+        assert (
+            err.extra["reason"]
+            == IncompatibleDataError.ReasonCode.INVALID_NUMBER_OF_COLUMNS
+        )
+
+        assert "encoded_training_data_ncols" in err.extra
+        assert (
+            err.extra["encoded_training_data_ncols"]
+            == fitted_compression_model._n_col_train
+        )
+
+        assert "encoded_provided_data_ncols" in err.extra
+        assert err.extra["encoded_provided_data_ncols"] == 6
 
     def test_output_shape(
         self,
@@ -1308,11 +1591,11 @@ class TestCompressionModel_compress_dataframe:
         default_compression_model: CompressionModel,
         basic_training_data: TrainingDataFixture,
     ):
-        with pytest.raises(
-            RuntimeError,
-            match=r"Model is not fitted\.",
-        ):
+        with pytest.raises(ModelStateError) as err_info:
             default_compression_model.compress_dataframe(basic_training_data.dataframe)
+        err = err_info.value
+
+        assert err.reason == ModelStateError.ReasonCode.MODEL_NOT_FITTED
 
     def test_raise_when_column_index_does_not_match_training_data_index(
         self,
@@ -1322,11 +1605,24 @@ class TestCompressionModel_compress_dataframe:
         """Columns present but with different names should raise."""
         bad_df = basic_training_data.dataframe.copy()
         bad_df.columns = [f"wrong_marker_{i}" for i in range(bad_df.shape[1])]
-        with pytest.raises(
-            ValueError,
-            match=r"^Incompatible data. Provided data have different column index",
-        ):
+
+        with pytest.raises(IncompatibleDataError) as err_info:
             fitted_compression_model.compress_dataframe(bad_df)
+
+        err = err_info.value
+        assert "reason" in err.extra
+        assert (
+            err.extra["reason"] == IncompatibleDataError.ReasonCode.INVALID_COLUMN_INDEX
+        )
+
+        assert "training_data_index" in err.extra
+        assert (
+            err.extra["training_data_index"]
+            == fitted_compression_model.training_markers_index
+        ).all()
+
+        assert "provided_data_index" in err.extra
+        assert (err.extra["provided_data_index"] == bad_df.columns).all()
 
     def test_raise_when_columns_are_subset_of_training_markers(
         self,
@@ -1338,11 +1634,23 @@ class TestCompressionModel_compress_dataframe:
         With `training_markers_index` error is about the index.
         """
         partial_df = basic_training_data.dataframe.iloc[:, :-1]
-        with pytest.raises(
-            ValueError,
-            match=r"^Incompatible data. Provided data have different column index",
-        ):
+        with pytest.raises(IncompatibleDataError) as err_info:
             fitted_compression_model.compress_dataframe(partial_df)
+
+        err = err_info.value
+        assert "reason" in err.extra
+        assert (
+            err.extra["reason"] == IncompatibleDataError.ReasonCode.INVALID_COLUMN_INDEX
+        )
+
+        assert "training_data_index" in err.extra
+        assert (
+            err.extra["training_data_index"]
+            == fitted_compression_model.training_markers_index
+        ).all()
+
+        assert "provided_data_index" in err.extra
+        assert (err.extra["provided_data_index"] == partial_df.columns).all()
 
     def test_raise_when_columns_are_subset_of_training_markers_even_without_saved_index(
         self,
@@ -1356,13 +1664,27 @@ class TestCompressionModel_compress_dataframe:
         partial_df = basic_training_data.dataframe.iloc[:, :-1]
 
         fitted_compression_model.training_markers_index = None  # remove index
-        with pytest.raises(
-            ValueError,
-            match=(
-                r"^Incompatible data. Provided data have a different number of columns "
-            ),
-        ):
+
+        with pytest.raises(IncompatibleDataError) as err_info:
             fitted_compression_model.compress_dataframe(partial_df)
+
+        err = err_info.value
+        assert "reason" in err.extra
+        assert (
+            err.extra["reason"]
+            == IncompatibleDataError.ReasonCode.INVALID_NUMBER_OF_COLUMNS
+        )
+
+        assert "encoded_training_data_ncols" in err.extra
+        assert (
+            err.extra["encoded_training_data_ncols"]
+            == fitted_compression_model._n_col_train
+        )
+
+        assert "encoded_provided_data_ncols" in err.extra
+        assert err.extra["encoded_provided_data_ncols"] == (
+            partial_df.shape[1] * fitted_compression_model.encoding_size
+        )
 
     def test_column_reordering(
         self,
@@ -1506,13 +1828,12 @@ class TestCompressionModel_compress_dataframe:
         fitted_compression_model: CompressionModel,
         basic_training_data: TrainingDataFixture,
     ):
-        with pytest.raises(
-            ValueError,
-            match=r"Missing values not encoded with a vector of 0",
-        ):
+        with pytest.raises(InvalidEncodingMapError) as err_info:
             fitted_compression_model.compress_dataframe(
                 basic_training_data.dataframe, missing_values={"A"}
             )
+        err = err_info.value
+        assert err.reason == InvalidEncodingMapError.ReasonCode.MISSING_VALUE_NOT_ZERO
 
 
 def test_public_api_exports():

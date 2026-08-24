@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "Tanzila Islam", email = "tanzilamohita@gmail.com" }
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "matplotlib>=3.10.8",
     "numpy>=2.4.4",
@@ -36,7 +36,6 @@ lint_lsp_formatter = [
     "black>=26.3.1",
     "isort>=8.0.1",
     "ruff>=0.14.6",
-    "docformatter>=1.7.8",
 ]
 doc = [
     "sphinx>=9.0.4",
@@ -90,7 +89,11 @@ extend-select = [
   "ERA", # commented code https://docs.astral.sh/ruff/rules/#eradicate-era
   "B",   # flake8-bugbear https://docs.astral.sh/ruff/rules/#flake8-bugbear-b
   "RUF", # Ruff-specific https://docs.astral.sh/ruff/rules/#refurb-furb
+  "TID251",  # flake8-tidy-imports: banned-api
 ]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"warnings.warn".msg = "Use deepcgp._base_warnings._deepcgp_warn() instead, to get the correct stacklevel automatically."
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/test_**.py" = [
@@ -99,10 +102,10 @@ extend-select = [
   "N",   # to make test class name more permisive
   "SLF", # to test private member
 ]
+"docs/**" = ["ERA"]
+"{playground,scratch,sandbox}*.py" = ["D","DOC", "TID", "ARG", "T20", "F401", "TID251"]
+"{playground,scratch,sandbox}*/**" = ["D","DOC", "TID", "ARG", "T20", "F401", "TID251"]
 
-"docs/**" = [
-  "ERA",
-]
 
 
 [tool.ruff.lint.pydocstyle]
@@ -112,5 +115,3 @@ convention = "numpy"
 "typeCheckingMode" = "basic"
 exclude = ["source_material", "**/__pycache__", "**/.*"]
 
-[tool.docformatter]
-black = true

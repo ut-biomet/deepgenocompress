@@ -1,4 +1,3 @@
-import re
 from itertools import cycle
 
 import numpy as np
@@ -7,10 +6,13 @@ import pytest
 from pytest_mock import MockerFixture
 
 from deepcgp.data_processing import (
+    AllZerosEncodedWarning,
     _validate_encoding_map,
     build_one_hot_encoding_map,
     encode_snp_array,
 )
+from deepcgp.exceptions import DeepcgpError, InvalidEncodingMapError
+from deepcgp.warnings import DeepcgpWarning
 
 
 @pytest.fixture
@@ -64,13 +66,111 @@ def basic_geno_array_with_missing_values(missing_values_fixt):
     )
 
 
+class TestAllZerosEncodedWarning:
+    def test_warning_is_DeepcgpWarning(self):
+        assert issubclass(AllZerosEncodedWarning, DeepcgpWarning)
+
+    def test_warning_message(self):
+        expected_msg = (
+            "The encoded array contains only zeros. This indicate that all "
+            "values in geno_array are missing or not present in encoding_map."
+        )
+        warn = AllZerosEncodedWarning()
+
+        assert expected_msg in str(warn)
+
+
+class TestInvalidEncodingMapError:
+    def test_error_is_DeepcgpError(self):
+        assert issubclass(InvalidEncodingMapError, DeepcgpError)
+
+    def test_all_reason_codes_have_a_message(self):
+        assert set(InvalidEncodingMapError._MESSAGES) == set(
+            InvalidEncodingMapError.ReasonCode
+        )
+
+    @pytest.mark.parametrize(
+        "reason, extra, expected_msg",
+        [
+            (
+                InvalidEncodingMapError.ReasonCode.INVALID_TYPE,
+                {"provided_type": list},
+                "`encoding_map` must be a collections.abc.Mapping got a list.",
+            ),
+            (
+                InvalidEncodingMapError.ReasonCode.EMPTY_ENCODING_MAP,
+                None,
+                "Encoding map is empty.",
+            ),
+            (
+                InvalidEncodingMapError.ReasonCode.INVALID_ENCODING,
+                {
+                    "offending_allele": "A",
+                    "provided_encoding": "0001",
+                },
+                (
+                    "Encoding for allele 'A' must be a list of numerical values, got "
+                    "'0001'."
+                ),
+            ),
+            (
+                InvalidEncodingMapError.ReasonCode.LENGTH_MISMATCH,
+                {
+                    "reference_allele": "A",
+                    "offending_allele": "T",
+                    "provided_encoding": [0, 1],
+                    "reference_encoding": [1, 0, 0, 0],
+                },
+                (
+                    "All encodings must have the same length, got a length of "
+                    "2 for allele 'T' but 4 for allele 'A'"
+                ),
+            ),
+            (
+                InvalidEncodingMapError.ReasonCode.MISSING_VALUE_NOT_ZERO,
+                {
+                    "offending_missing_value": "N",
+                    "provided_encoding": [9, 9],
+                },
+                "Missing value 'N' must be encoded with a vector of 0, got '[9, 9]'.",
+            ),
+        ],
+        ids=[
+            "INVALID_TYPE",
+            "EMPTY_ENCODING_MAP",
+            "INVALID_ENCODING",
+            "LENGTH_MISMATCH",
+            "MISSING_VALUE_NOT_ZERO",
+        ],
+    )
+    def test_error_messages_and_extra(self, reason, extra, expected_msg):
+        err = InvalidEncodingMapError(
+            reason=reason,
+            extra=extra,
+        )
+        assert "reason" in err.extra
+        assert err.extra["reason"] is reason
+
+        if extra is not None:
+            for k, v in extra.items():
+                assert k in err.extra
+                assert v == err.extra[k]
+
+        assert expected_msg in str(err)
+
+
 class TestValidateEncodingMap:
     """Tests for _validate_encoding_map functions."""
 
     def test_raise_if_not_dict(self):
-        encoding_map = [[0, 0, 1], [0, 0, 1], [0, 0, 1]]
-        with pytest.raises(TypeError, match="must be a dict"):
+        encoding_map = "[[0, 0, 1], [0, 0, 1], [0, 0, 1]]"
+        with pytest.raises(InvalidEncodingMapError) as err_info:
             _validate_encoding_map(encoding_map)  # pyright: ignore [reportArgumentType]
+
+        err = err_info.value
+        assert err.reason == InvalidEncodingMapError.ReasonCode.INVALID_TYPE
+        assert "provided_type" in err.extra
+        assert err.extra["provided_type"] == str  # noqa: E721
 
     def test_raise_if_encodings_are_not_list(self):
         encoding_map = {
@@ -78,8 +178,15 @@ class TestValidateEncodingMap:
             "B": (0, 1, 0),
             "C": (1, 0, 0),
         }
-        with pytest.raises(ValueError, match="must be a list"):
+        with pytest.raises(InvalidEncodingMapError) as err_info:
             _validate_encoding_map(encoding_map)  # pyright: ignore [reportArgumentType]
+
+        err = err_info.value
+        assert err.reason == InvalidEncodingMapError.ReasonCode.INVALID_ENCODING
+        assert "offending_allele" in err.extra
+        assert err.extra["offending_allele"] == "A"
+        assert "provided_encoding" in err.extra
+        assert err.extra["provided_encoding"] == (0, 0, 1)
 
     def test_raise_if_encodings_have_different_lengths(self):
         encoding_map = {
@@ -87,8 +194,23 @@ class TestValidateEncodingMap:
             "B": [0, 1],
             "C": [0, 0, 1],
         }
-        with pytest.raises(ValueError, match="must have the same length"):
+        with pytest.raises(InvalidEncodingMapError) as err_info:
             _validate_encoding_map(encoding_map)
+
+        err = err_info.value
+        assert err.reason == InvalidEncodingMapError.ReasonCode.LENGTH_MISMATCH
+
+        assert "offending_allele" in err.extra
+        assert err.extra["offending_allele"] == "B"
+
+        assert "provided_encoding" in err.extra
+        assert err.extra["provided_encoding"] == [0, 1]
+
+        assert "reference_allele" in err.extra
+        assert err.extra["reference_allele"] == "A"
+
+        assert "reference_encoding" in err.extra
+        assert err.extra["reference_encoding"] == [1]
 
     def test_raise_if_encodings_are_not_int_or_float(self):
         encoding_map = {
@@ -96,8 +218,17 @@ class TestValidateEncodingMap:
             "B": ["0", "1", "0"],
             "C": ["1", "0", "0"],
         }
-        with pytest.raises(ValueError, match="must be a list of numerical values"):
+        with pytest.raises(InvalidEncodingMapError) as err_info:
             _validate_encoding_map(encoding_map)  # pyright: ignore [reportArgumentType]
+
+        err = err_info.value
+        assert err.reason == InvalidEncodingMapError.ReasonCode.INVALID_ENCODING
+
+        assert "offending_allele" in err.extra
+        assert err.extra["offending_allele"] == "A"
+
+        assert "provided_encoding" in err.extra
+        assert err.extra["provided_encoding"] == ["0", "0", "1"]
 
     def test_return_none_when_valid(self):
         encoding_map = {
@@ -147,15 +278,17 @@ class TestValidateEncodingMap:
             ".": missing_vector,
         }
 
-        expected_msg = (
-            "Missing values not encoded with a vector of 0, for '.' "
-            f"got {missing_vector}."
-        )
-        with pytest.raises(
-            ValueError,
-            match=re.escape(expected_msg),
-        ):
+        with pytest.raises(InvalidEncodingMapError) as err_info:
             _validate_encoding_map(encoding_map, missing_values=["."])
+
+        err = err_info.value
+        assert err.reason == InvalidEncodingMapError.ReasonCode.MISSING_VALUE_NOT_ZERO
+
+        assert "offending_missing_value" in err.extra
+        assert err.extra["offending_missing_value"] == "."
+
+        assert "provided_encoding" in err.extra
+        assert err.extra["provided_encoding"] == missing_vector
 
     def test_pass_when_missing_values_is_a_0_vector(self):
         encoding_map = {
@@ -168,11 +301,11 @@ class TestValidateEncodingMap:
 
     def test_raise_if_encoding_map_is_empty(self):
         encoding_map = {}
-        with pytest.raises(
-            ValueError,
-            match=re.escape("`encoding_map` is empty."),
-        ):
-            _validate_encoding_map(encoding_map)
+        with pytest.raises(InvalidEncodingMapError) as err_info:
+            _validate_encoding_map(encoding_map, missing_values=["."])
+
+        err = err_info.value
+        assert err.reason == InvalidEncodingMapError.ReasonCode.EMPTY_ENCODING_MAP
 
 
 class TestBuildOneHotEncodingMap:
@@ -440,13 +573,7 @@ class TestEncodeSnpArray:
         np.testing.assert_array_equal(result_t, np.array([basic_encoding_map["T"]]))
 
         geno_unkown = np.array([["N"]])
-        with pytest.warns(
-            UserWarning,
-            match=(
-                "The encoded array contains only zeros. This may indicate that all "
-                "values in geno_array are missing or not present in encoding_map."
-            ),
-        ):
+        with pytest.warns(AllZerosEncodedWarning):
             result = encode_snp_array(geno_unkown, encoding_map=basic_encoding_map)
         np.testing.assert_array_equal(
             result, np.array([[0] * len(basic_encoding_map["A"])])
@@ -457,13 +584,7 @@ class TestEncodeSnpArray:
         encoding_values_len = len(basic_encoding_map["A"])
         geno_unkown = np.array([[""]])
 
-        with pytest.warns(
-            UserWarning,
-            match=(
-                "The encoded array contains only zeros. This may indicate that all "
-                "values in geno_array are missing or not present in encoding_map."
-            ),
-        ):
+        with pytest.warns(AllZerosEncodedWarning):
             result = encode_snp_array(geno_unkown, encoding_map=basic_encoding_map)
         np.testing.assert_array_equal(result, np.array([[0] * encoding_values_len]))
 
@@ -474,13 +595,7 @@ class TestEncodeSnpArray:
     def test_with_empty_array(self, basic_encoding_map):
         geno_empty = np.array([[]])
 
-        with pytest.warns(
-            UserWarning,
-            match=(
-                "The encoded array contains only zeros. This may indicate that all "
-                "values in geno_array are missing or not present in encoding_map."
-            ),
-        ):
+        with pytest.warns(AllZerosEncodedWarning):
             result = encode_snp_array(geno_empty, encoding_map=basic_encoding_map)
         np.testing.assert_array_equal(result, np.array([[]]))
 
@@ -595,13 +710,7 @@ class TestEncodeSnpArray:
         )
         encoding_map = {"Z": [1, 0], "Y": [0, 1]}
 
-        with pytest.warns(
-            UserWarning,
-            match=(
-                "The encoded array contains only zeros. This may indicate that all "
-                "values in geno_array are missing or not present in encoding_map."
-            ),
-        ):
+        with pytest.warns(AllZerosEncodedWarning):
             result = encode_snp_array(geno, encoding_map=encoding_map)
         expected = np.array(
             [

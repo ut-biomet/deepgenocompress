@@ -12,14 +12,30 @@ encode_snp_array(geno_array, missing_values={"N"}, encoding_map=None)
     Encode a genotype array into a numerical matrix.
 """
 
-import warnings
 from collections.abc import Collection, Container, Mapping
+from enum import StrEnum, auto
 from numbers import Real
-from typing import Any
+from typing import Any, ClassVar, TypedDict
 
 import numpy as np
 import pandas as pd
 from numpy.typing import ArrayLike, NDArray
+
+from deepcgp._base_exceptions import DeepcgpError, _type_fullname
+from deepcgp._base_warnings import DeepcgpWarning, _deepcgp_warn
+
+
+class AllZerosEncodedWarning(DeepcgpWarning):
+    """Issued when the encoded geno array only contains zeros.
+
+    This indicate the genotype array was interpreted as conatining missing values only.
+    """
+
+    def __init__(self):
+        super().__init__(
+            message="The encoded array contains only zeros. This indicate that all "
+            "values in geno_array are missing or not present in encoding_map."
+        )
 
 
 def build_one_hot_encoding_map(
@@ -96,48 +112,160 @@ def build_one_hot_encoding_map(
     }
 
 
+class InvalidEncodingMapError(DeepcgpError):
+    """Raised when an encoding map is not valid.
+
+    Instances are constructed with a :class:`ReasonCode` identifying which validation
+    failed, plus an ``extra`` mapping of contextual values
+    """
+
+    class ReasonCode(StrEnum):
+        """Possible invalid reasons."""
+
+        def __repr__(self) -> str:
+            """Return the string representation."""
+            return self.name
+
+        INVALID_TYPE = auto()
+        """Encoding map is not a :class:`~collections.abc.Mapping`."""
+        EMPTY_ENCODING_MAP = auto()
+        """Encoding map has no entries."""
+        INVALID_ENCODING = auto()
+        """An allele's encoding is not a list of numerical values."""
+        LENGTH_MISMATCH = auto()
+        """An allele's encoding has a different length than the reference allele's
+        encoding."""
+        MISSING_VALUE_NOT_ZERO = auto()
+        """An allele listed as a missing value is not encoded as a vector of all
+        zeros."""
+
+    _MESSAGES: ClassVar[dict["InvalidEncodingMapError.ReasonCode", str]] = {
+        ReasonCode.INVALID_TYPE: (
+            f"`encoding_map` must be a {_type_fullname(Mapping)} "
+            "got a {provided_type_str}."
+        ),
+        ReasonCode.EMPTY_ENCODING_MAP: "Encoding map is empty.",
+        ReasonCode.INVALID_ENCODING: (
+            "Encoding for allele '{offending_allele}' must be a list of numerical "
+            "values, got '{provided_encoding}'."
+        ),
+        ReasonCode.LENGTH_MISMATCH: (
+            "All encodings must have the same length, got a length of "
+            "{provided_encoding_length} for allele '{offending_allele}' but "
+            "{reference_encoding_length} for allele '{reference_allele}'"
+        ),
+        ReasonCode.MISSING_VALUE_NOT_ZERO: (
+            "Missing value '{offending_missing_value}' must be encoded with a "
+            "vector of 0, got '{provided_encoding}'."
+        ),
+    }
+
+    class _Extra(TypedDict, total=False):
+        reason: "InvalidEncodingMapError.ReasonCode"
+        provided_type: type
+        provided_encoding: Any
+        offending_allele: Any
+        reference_encoding: Any
+        reference_allele: Any
+        offending_missing_value: Any
+
+    extra: "_Extra | dict[str, Any]"
+    """Extra information related to the error.
+
+    :class:`dict` with possible keys depending on the :attr:`reason`:
+        - ``reason``: :class:`ReasonCode`
+        - ``provided_type``: :class:`type`
+        - ``provided_encoding``: :class:`Any`
+        - ``offending_allele``: :class:`Any`
+        - ``reference_encoding``: :class:`Any`
+        - ``reference_allele``: :class:`Any`
+        - ``offending_missing_value``: :class:`Any`
+    """
+
+    reason: ReasonCode
+    """Which validation rule the encoding map failed."""
+
+    def __init__(
+        self,
+        reason: "InvalidEncodingMapError.ReasonCode",
+        extra: "InvalidEncodingMapError. _Extra | None" = None,
+    ):
+        self.reason = reason
+        extra = extra or {}
+        str_extra = {
+            "provided_type_str": (
+                _type_fullname(extra["provided_type"])
+                if "provided_type" in extra
+                else None
+            ),
+            "provided_encoding_length": (
+                len(extra["provided_encoding"])
+                if "provided_encoding" in extra
+                else None
+            ),
+            "reference_encoding_length": (
+                len(extra["reference_encoding"])
+                if "reference_encoding" in extra
+                else None
+            ),
+        }
+        str_extra = {k: v for k, v in str_extra.items() if v is not None}
+        message = self._MESSAGES[reason].format(**extra, **str_extra)
+        super().__init__(message=message, extra={"reason": reason, **extra})
+
+
 def _validate_encoding_map(
     encoding_map: Mapping[Any, list[int] | list[float]],
     missing_values: Container = [],
 ) -> None:
     """Ensure the encoding map is valid.
 
-    Raises an exception if invalid.
+    Raises an :class:`InvalidEncodingMapError` if invalid.
     """
     if not isinstance(encoding_map, Mapping):
-        raise TypeError(  # pyright: ignore [reportUnreachable]
-            f"`encoding_map` must be a dict, got {type(encoding_map)}"
+        raise InvalidEncodingMapError(
+            reason=InvalidEncodingMapError.ReasonCode.INVALID_TYPE,
+            extra={"provided_type": type(encoding_map)},
         )
 
     if len(encoding_map) == 0:
-        raise ValueError("`encoding_map` is empty.")
+        raise InvalidEncodingMapError(
+            reason=InvalidEncodingMapError.ReasonCode.EMPTY_ENCODING_MAP
+        )
 
-    expected_length = len(next(iter(encoding_map.values())))
+    reference_allele = next(iter(encoding_map.keys()))  # first key
+    reference_encoding = encoding_map[reference_allele]
 
     for allele, encoding in encoding_map.items():
         if not isinstance(encoding, list) or not all(
             isinstance(v, Real) for v in encoding
         ):
-            raise ValueError(
-                f"Encoding for '{allele}' must be a list of numerical values ",
-                f"got {encoding}",
+            raise InvalidEncodingMapError(
+                reason=InvalidEncodingMapError.ReasonCode.INVALID_ENCODING,
+                extra={"offending_allele": allele, "provided_encoding": encoding},
             )
-        if len(encoding) != expected_length:
-            raise ValueError(
-                f"All encodings must have the same length, got {len(encoding)} "
-                f"for '{allele}' but {expected_length}"
-                f"for '{next(iter(encoding_map.keys()))}'"
+        if len(encoding) != len(reference_encoding):
+            raise InvalidEncodingMapError(
+                reason=InvalidEncodingMapError.ReasonCode.LENGTH_MISMATCH,
+                extra={
+                    "offending_allele": allele,
+                    "provided_encoding": encoding,
+                    "reference_allele": reference_allele,
+                    "reference_encoding": encoding_map[reference_allele],
+                },
             )
         if allele in missing_values and any(v != 0 for v in encoding):
-            raise ValueError(
-                "Missing values not encoded with a vector of 0, "
-                f"for '{allele}' got {encoding}."
+            raise InvalidEncodingMapError(
+                reason=InvalidEncodingMapError.ReasonCode.MISSING_VALUE_NOT_ZERO,
+                extra={
+                    "offending_missing_value": allele,
+                    "provided_encoding": encoding,
+                },
             )
 
 
 def encode_snp_array(
     geno_array: NDArray,
-    # geno_array: NDArray[np.str_],
     missing_values: Collection = {"N"},
     encoding_map: Mapping[Any, list[int] | list[float]] | None = None,
 ) -> NDArray[np.float32]:
@@ -171,14 +299,13 @@ def encode_snp_array(
 
     Raises
     ------
-    TypeError
-        If ``encoding_map`` is provided but is not a dict.
-    ValueError
-        If ``encoding_map`` contains encodings that are not lists of numerical
-        values, or if the encodings have inconsistent lengths.
-    ValueError
-        If ``missing_values`` are encoded with a value other than a vector of 0 in
-        ``encoding_map``.
+    InvalidEncodingMapError
+        If ``encoding_map`` is provided but:
+          - is not a Mapping (e.g. a dict)
+          - is empty
+          - encodings are not lists of numerical values
+          - encodings have inconsistent lengths
+          - ``missing_values`` are encoded with a value other than a vector of 0
 
     Examples
     --------
@@ -218,11 +345,6 @@ def encode_snp_array(
     encoded_geno = np.array(encoded_rows, dtype=np.float32)
 
     if not np.any(encoded_geno):
-        warnings.warn(
-            "The encoded array contains only zeros. This may indicate that all values "
-            "in geno_array are missing or not present in encoding_map.",
-            UserWarning,
-            stacklevel=2,
-        )
+        _deepcgp_warn(AllZerosEncodedWarning())
 
     return encoded_geno
