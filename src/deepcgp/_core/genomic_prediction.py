@@ -1,21 +1,23 @@
 """TODO."""
 
-from keras import regularizers
-from keras.layers import (
-    BatchNormalization,
-    Conv1D,
-    Dense,
-    Dropout,
-    Flatten,
-    LeakyReLU,
-    MaxPooling1D,
-)
-from keras.models import Sequential
-from keras.optimizers import Adam
-
 
 def create_model(input_shape):
     """TODO."""
+
+    # lazy load keras
+    from keras import regularizers
+    from keras.layers import (
+        BatchNormalization,
+        Conv1D,
+        Dense,
+        Dropout,
+        Flatten,
+        LeakyReLU,
+        MaxPooling1D,
+    )
+    from keras.models import Sequential
+    from keras.optimizers import Adam
+
     # there are 13 layers defined in this model  except input layer
     model = Sequential()
     model.add(
