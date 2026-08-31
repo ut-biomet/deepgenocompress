@@ -30,7 +30,10 @@ def encoding_size(encoding_map: Mapping[Any, list[int] | list[float]]):
 
     Raises
     ------
-    StopIteration
+    ValueError
         If ``encoding_map`` is empty.
     """
-    return len(next(iter(encoding_map.values())))
+    try:
+        return len(next(iter(encoding_map.values())))
+    except StopIteration as e:
+        raise ValueError("encoding_map must not be empty") from e

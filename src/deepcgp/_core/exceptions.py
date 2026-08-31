@@ -2,7 +2,7 @@
 
 import reprlib
 from pprint import pformat
-from typing import Any
+from typing import Any, TypedDict
 
 
 class _Raw:
@@ -45,6 +45,22 @@ class DeepcgpError(Exception):
             formated_extra = pformat(truncated_extra, depth=2, sort_dicts=False)
             return f"{self.message}\nExtra information:\n{formated_extra}"
         return self.message
+
+
+class DuplicatedMarkerIDsError(DeepcgpError):
+    """Raised when provided data does not have unique marker ids."""
+
+    class _Extra(TypedDict, total=True):
+        duplicated_ids: list[str]
+
+    extra: "_Extra | dict[str, Any]"
+
+    def __init__(self, duplicated_ids: list[str]):
+        n_duplicated = len(duplicated_ids)
+        msg = (
+            f"Found {n_duplicated} duplicated marker id(s). Marker ids must be unique."
+        )
+        super().__init__(message=msg, extra={"duplicated_ids": duplicated_ids})
 
 
 def _type_fullname(t: type) -> str:

@@ -40,28 +40,46 @@ class AllZerosEncodedWarning(DeepcgpWarning):
         )
 
 
+class UnmappedValuesWarning(DeepcgpWarning):
+    """Issued when values in the data to encode has no explicit key in the encoding map.
+
+    Such values are considered as "missing values" and will be encoded with a zero
+    vector like explicit missing values. This warning is here to notify the user
+    about and to prevent for some inadvertently unencoded values.
+    """
+
+    def __init__(self, unmapped_values: list):
+        super().__init__(
+            message=(
+                f"{len(unmapped_values)} value(s) in the data to encode are not "
+                "explicitly present in the encoding map and will be encoded as a zero "
+                "vector."
+            )
+        )
+
+
 def build_one_hot_encoding_map(
     geno_array: ArrayLike,
-    exclude: Collection = {"N"},
+    missing_values: Collection = {},
 ) -> dict[Any, list[float]]:
     """Build a one-hot encoding map based on alleles found in the genotype array.
 
     The encoding map is built by extracting all unique values from the array,
-    excluding specified missing or ambiguous values, and assigning each valid
-    allele a one-hot vector of length equal to the number of unique valid alleles.
+    and assigning each valid allele a one-hot vector of length equal to the number
+    of unique "non-missing" alleles. Missing values specifyed with ``missing_values``
+    will be encoded with a vector of ``0``.
+
 
     Parameters
     ----------
     geno_array :
         2D array of genotype data.
-    exclude :
+    missing_values :
         Any object supporting the ``in`` operator (e.g. set, list, tuple).
-        Collection of values to exclude from the one-hot encoding map.
-        Typically the values of ``geno_array`` representing missing or ambiguous
-        genotype calls that should not be assigned an encoding vector.
-        Defaults to ``{"N"}``. Note that any value for which :func:`pandas.isna`
-        returns ``True`` (e.g. ``np.nan``, ``None``, ``pd.NA``...)
-        is always implicitly excluded regardless of this container's contents.
+        Collection of values to consider as missing values. Typically the values
+        of ``geno_array`` representing missing or ambiguous genotype calls that
+        should not be assigned an encoding vector. Those values will be explicitly
+        encoded with a vector of ``0`` in the encoding map.
 
     Returns
     -------
@@ -69,10 +87,12 @@ def build_one_hot_encoding_map(
         The vectors are of length n, where n is the number of unique, non-excluded
         alleles.
 
-    Notes
-    -----
-        Any value for which  :func:`pandas.isna` returns ``True`` (ie. ``np.nan``,
-        ``None``, ``pd.NA``, and ``pd.NaT``) is always excluded from the encoding map.
+    Note
+    ----
+    Any value for which  :func:`pandas.isna` returns ``True`` (ie. ``np.nan``,
+    ``None``, ``pd.NA``, and ``pd.NaT``) will not be included in the encoding map,
+    (neither as a "one-hot" vector or a zero vector) and will be treated as missing
+    values by :func:`encode_snp_array`.
 
     Examples
     --------
@@ -87,31 +107,33 @@ def build_one_hot_encoding_map(
             ["A", "C", "A", "T", "T", "A", None],
         ]
         build_one_hot_encoding_map(geno_array)
-
     """
     # Note: to make the code simpler all "NA like" (ie. for which pd.isna returns True,
-    # np.nan, pd.NA, None, etc...) values are always excluded. If not we would have to
-    # handle each manually:
-    #   - np.nan != np.nan so checking `np.nan in exclude` would fail
-    #   - ("A" == pd.NA) equals pd.NA
+    # np.nan, pd.NA, None, etc...) values are not included as explicit missing values
+    # (ie. vector of 0s) because they cannot reliably be used as dict keys:
+    #   - `np.nan == np.nan` is False
+    #   - `("A" == pd.NA)` equals pd.NA
     #   - etc...
 
     unique_values = set(np.asarray(geno_array).ravel())
 
     unique_non_missing_values = {u for u in unique_values if not pd.isna(u)}
-    safe_exclude = [ex for ex in exclude if not pd.isna(ex)]
+    safe_missing_values = [miss for miss in missing_values if not pd.isna(miss)]
 
     # Note:
     alleles = [
         a
         for a in sorted(unique_non_missing_values, key=lambda x: str(x))
-        if a not in safe_exclude
+        if a not in safe_missing_values
     ]
     n = len(alleles)
-    return {
+    enc_map = {
         allele: [1.0 if i == j else 0.0 for j in range(n)]
         for i, allele in enumerate(alleles)
     }
+    for miss in safe_missing_values:
+        enc_map[miss] = [0] * n
+    return enc_map
 
 
 class InvalidEncodingMapError(DeepcgpError):
@@ -268,7 +290,7 @@ def _validate_encoding_map(
 
 def encode_snp_array(
     geno_array: NDArray,
-    missing_values: Collection = {"N"},
+    missing_values: Collection = {},
     encoding_map: Mapping[Any, list[int] | list[float]] | None = None,
 ) -> NDArray[np.float32]:
     """Encode a genotype array into a numerical matrix.
@@ -287,7 +309,7 @@ def encode_snp_array(
         Any object supporting the ``in`` operator (e.g. set, list, tuple).
         Collection of value of geno_array representing missing genotype calls
         that should not be assigned a default one hot encoding vector.
-        They will be encoded as a zero vector. Defaults to ``{"N"}``.
+        They will be encoded as a zero vector. Defaults to ``{}``.
     encoding_map :
         A dictionary mapping each allele to its encoding vector.
         If None, a one-hot encoding map is built automatically from the unique
@@ -299,15 +321,14 @@ def encode_snp_array(
         2D array of shape (n_samples, n_alleles * encoding_length) where each
         row is the flattened encoding of the corresponding input row.
 
-    Raises
-    ------
-    InvalidEncodingMapError
-        If ``encoding_map`` is provided but:
-          - is not a Mapping (e.g. a dict)
-          - is empty
-          - encodings are not lists of numerical values
-          - encodings have inconsistent lengths
-          - ``missing_values`` are encoded with a value other than a vector of 0
+
+    :raises InvalidEncodingMapError: If ``encoding_map`` is provided but:
+
+        - is not a Mapping (e.g. a dict)
+        - is empty
+        - encodings are not lists of numerical values
+        - encodings have inconsistent lengths
+        - ``missing_values`` are encoded with a value other than a vector of 0
 
     Examples
     --------
@@ -335,6 +356,12 @@ def encode_snp_array(
         _validate_encoding_map(encoding_map, missing_values)
     else:
         encoding_map = build_one_hot_encoding_map(geno_array, missing_values)
+
+    unique_values = set(np.asarray(geno_array).ravel())
+    unique_non_missing_values = {u for u in unique_values if not pd.isna(u)}
+    unmapped_values = [v for v in unique_non_missing_values if v not in encoding_map]
+    if len(unmapped_values) != 0:
+        _deepcgp_warn(UnmappedValuesWarning(unmapped_values))
 
     encoding_length = encoding_size(encoding_map)
 

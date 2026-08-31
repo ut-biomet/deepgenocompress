@@ -1,6 +1,7 @@
 import copy
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from unittest.mock import call
 
 import numpy as np
@@ -21,6 +22,7 @@ from deepcgp._core.compression import (
     possible_first_layer_sizes,
 )
 from deepcgp._core.data_processing import (
+    UnmappedValuesWarning,
     _validate_encoding_map,
     build_one_hot_encoding_map,
     encode_snp_array,
@@ -39,7 +41,7 @@ from deepcgp.warnings import (
     ColumnPaddingWarning,
     DeepcgpWarning,
     IncompleteEncodingChunkWarning,
-    LessThanOneAlleleChunks,
+    LessThanOneAlleleChunksWarning,
     NonCompressiveAutoencoderWarning,
 )
 
@@ -124,7 +126,7 @@ class TestIncompleteEncodingChunkWarning:
 
 class TestLessThanOneAlleleChunks:
     def test_warning_is_DeepcgpWarning(self):
-        assert issubclass(LessThanOneAlleleChunks, DeepcgpWarning)
+        assert issubclass(LessThanOneAlleleChunksWarning, DeepcgpWarning)
 
     def test_warning_message(self):
         expected_msg = (
@@ -132,12 +134,12 @@ class TestLessThanOneAlleleChunks:
             "`encoding_size` (50) (ie. each chunk will consist of 1 or "
             "less encoded allele)."
         )
-        warn = LessThanOneAlleleChunks(first_layer_size=10, encoding_size=50)
+        warn = LessThanOneAlleleChunksWarning(first_layer_size=10, encoding_size=50)
 
         assert expected_msg in str(warn)
 
     def test_warning_extra(self):
-        warn = LessThanOneAlleleChunks(first_layer_size=10, encoding_size=50)
+        warn = LessThanOneAlleleChunksWarning(first_layer_size=10, encoding_size=50)
 
         assert warn.extra["first_layer_size"] == 10
         assert warn.extra["encoding_size"] == 50
@@ -601,7 +603,7 @@ class Test_check_layer_size_and_encoding_compatibility:
         assert _check_layer_size_and_encoding_compatibility(10, 5) is None
 
     def test_warn_when_encoding_size_equals_first_layer(self):
-        with pytest.warns(LessThanOneAlleleChunks):
+        with pytest.warns(LessThanOneAlleleChunksWarning):
             assert _check_layer_size_and_encoding_compatibility(8, 8) is None
 
     def test_warns_when_encoding_size_not_multiple_of_n_cols(self):
@@ -609,7 +611,9 @@ class Test_check_layer_size_and_encoding_compatibility:
             _check_layer_size_and_encoding_compatibility(10, 3)
 
     def test_warns_when_encoding_size_larger_than_first_layer(self):
-        with pytest.warns((LessThanOneAlleleChunks, IncompleteEncodingChunkWarning)):
+        with pytest.warns(
+            (LessThanOneAlleleChunksWarning, IncompleteEncodingChunkWarning)
+        ):
             _check_layer_size_and_encoding_compatibility(10, 20)
 
 
@@ -938,7 +942,7 @@ class TestCompressionModel_initialisation_from_dataframe:
 
         assert cm.encoding_map == build_one_hot_encoding_map(
             geno_array=basic_training_data.dataframe.to_numpy(),
-            exclude=missing_values,
+            missing_values=missing_values,
         )
 
     def test_parameter_propagation(self, basic_training_data: TrainingDataFixture):
@@ -978,7 +982,7 @@ class TestCompressionModel_initialisation_from_dataframe:
         # correct encoding_map
         assert cm.encoding_map == build_one_hot_encoding_map(
             geno_array=geno_data.to_numpy(),
-            exclude=[-1],
+            missing_values=[-1],
         )
 
     def test_raise_with_empty_dataframe(self):
@@ -1044,7 +1048,7 @@ class TestCompressionModel_initialisation_from_dataframe:
             "Z": [0.0, 1.0],
         }
 
-        with pytest.warns(AllZerosEncodedWarning):
+        with pytest.warns((AllZerosEncodedWarning, UnmappedValuesWarning)):
             cm = CompressionModel.from_dataframe(
                 training_dataframe=basic_training_data.dataframe,
                 encoding_map=encoding_map,
@@ -1052,7 +1056,7 @@ class TestCompressionModel_initialisation_from_dataframe:
             )
 
         # correct encoding
-        with pytest.warns(AllZerosEncodedWarning):
+        with pytest.warns((AllZerosEncodedWarning, UnmappedValuesWarning)):
             expected_encoded_array = encode_snp_array(
                 basic_training_data.dataframe.to_numpy(),
                 missing_values=missing_values,
@@ -1078,6 +1082,126 @@ class TestCompressionModel_initialisation_from_dataframe:
                 training_dataframe=basic_training_data.dataframe,
                 layer_sizes=[7, 3, 1],
             )
+
+
+class TestCompressionModel_initialisation_from_vcf_file:
+    # those tests relies much on mocked functions/methods because the method is
+    # rather simple and it does not worth retest read_vcf,
+    # build_one_hot_encoding_map and from_dataframe
+
+    VCF_DIR = Path(__file__).parent / "fixtures" / "vcf"
+
+    def test_can_instanciate(self):
+        cm = CompressionModel.from_vcf_file(
+            vcf_file=self.VCF_DIR / "basic.vcf",
+            use_bases=False,
+            marker_id_format="ref_alt",
+        )
+        assert isinstance(cm, CompressionModel)
+
+    def test_raise_error_if_training_encoded_geno_array_is_provided(self):
+        with pytest.raises(
+            TypeError,
+            match=re.escape(
+                "`training_encoded_geno_array` cannot be passed as a keyword argument "
+                "it is derived from `training_dataframe`."
+            ),
+        ):
+            CompressionModel.from_vcf_file(
+                vcf_file=self.VCF_DIR / "basic.vcf",
+                use_bases=False,
+                marker_id_format="ref_alt",
+                training_encoded_geno_array=None,
+            )
+
+    def test_build_encoding_map_when_not_provided(self, mocker: MockerFixture):
+        fake_vcf_data = "fake_vcf_data"
+        fake_encoding_map = "fake_encoding_map"
+
+        mocker.patch("deepcgp._core.compression.read_vcf", return_value=fake_vcf_data)
+        mock_build_vcf_encoding_map = mocker.patch(
+            "deepcgp._core.compression.build_vcf_encoding_map",
+            return_value=fake_encoding_map,
+        )
+        mock_from_df = mocker.patch.object(CompressionModel, "from_dataframe")
+
+        CompressionModel.from_vcf_file("file.vcf")
+
+        mock_build_vcf_encoding_map.assert_called_once_with(vcf_data=fake_vcf_data)
+        mock_from_df.assert_called_once()
+        assert mock_from_df.call_args.kwargs["encoding_map"] == fake_encoding_map
+
+    def test_use_encoding_map_when_provided(self, mocker: MockerFixture):
+        fake_vcf_data = "fake_vcf_data"
+        custom_encoding_map = {"A": [0.0]}
+
+        mocker.patch("deepcgp._core.compression.read_vcf", return_value=fake_vcf_data)
+        mock_build_vcf_encoding_map = mocker.patch(
+            "deepcgp._core.compression.build_vcf_encoding_map"
+        )
+        mock_from_df = mocker.patch.object(CompressionModel, "from_dataframe")
+
+        CompressionModel.from_vcf_file("file.vcf", encoding_map=custom_encoding_map)
+
+        mock_build_vcf_encoding_map.assert_not_called()
+        mock_from_df.assert_called_once()
+        assert mock_from_df.call_args.kwargs["encoding_map"] == custom_encoding_map
+
+    def test_pass_arguments_to_read_vcf(self, mocker: MockerFixture):
+        custom_vcf_file = "custom_vcf_file"
+        custom_use_bases = "custom_use_bases"
+        custom_arker_id_format = "custom_arker_id_format"
+        custom_strict_gt = "custom_strict_gt"
+
+        fake_vcf_data = "fake_vcf_data"
+
+        mock_read_vcf = mocker.patch(
+            "deepcgp._core.compression.read_vcf", return_value=fake_vcf_data
+        )
+
+        mocker.patch("deepcgp._core.compression.build_vcf_encoding_map")
+        mock_from_df = mocker.patch.object(CompressionModel, "from_dataframe")
+
+        CompressionModel.from_vcf_file(
+            vcf_file=custom_vcf_file,
+            use_bases=custom_use_bases,  # pyright: ignore [reportArgumentType]
+            marker_id_format=custom_arker_id_format,  # pyright: ignore [reportArgumentType]
+            strict_gt=custom_strict_gt,  # pyright: ignore [reportArgumentType]
+        )
+
+        mock_read_vcf.assert_called_once_with(
+            vcf_file=custom_vcf_file,
+            use_bases=custom_use_bases,
+            marker_id_format=custom_arker_id_format,
+            strict_gt=custom_strict_gt,
+        )
+        mock_from_df.assert_called_once()
+        assert mock_from_df.call_args.kwargs["training_dataframe"] == fake_vcf_data
+
+    def test_forward_kwargs_to_from_dataframe(self, mocker: MockerFixture):
+        custom_vcf_file = "custom_vcf_file"
+
+        mocker.patch("deepcgp._core.compression.read_vcf")
+        mocker.patch("deepcgp._core.compression.build_vcf_encoding_map")
+        mock_from_df = mocker.patch.object(CompressionModel, "from_dataframe")
+
+        CompressionModel.from_vcf_file(vcf_file=custom_vcf_file, x="x", y="y")
+        mock_from_df.assert_called_once()
+        assert mock_from_df.call_args.kwargs["x"] == "x"
+        assert mock_from_df.call_args.kwargs["y"] == "y"
+
+    def test_returns_result_of_from_dataframe_classmethod(self, mocker: MockerFixture):
+        fake_CompressionModel = "fake_CompressionModel"
+
+        mocker.patch("deepcgp._core.compression.read_vcf")
+        mocker.patch("deepcgp._core.compression.build_vcf_encoding_map")
+        mock_from_df = mocker.patch.object(
+            CompressionModel, "from_dataframe", return_value=fake_CompressionModel
+        )
+
+        cm = CompressionModel.from_vcf_file(vcf_file="vcf_file")
+        mock_from_df.assert_called_once()
+        assert cm == fake_CompressionModel
 
 
 class TestCompressionModel_layer_sizes:
@@ -1734,8 +1858,18 @@ class TestCompressionModel_compress_dataframe:
         [
             (None, "USE_MODEL_ENCODING_MAP"),
             (
-                {"A": [0, 0, 0, 1], "B": [1, 0, 0, 0]},
-                {"A": [0, 0, 0, 1], "B": [1, 0, 0, 0]},
+                {
+                    "A": [1, 0, 0, 0],
+                    "T": [1, 0, 0, 0],
+                    "C": [0, 0, 0, 1],
+                    "G": [0, 0, 0, 1],
+                },
+                {
+                    "A": [1, 0, 0, 0],
+                    "T": [1, 0, 0, 0],
+                    "C": [0, 0, 0, 1],
+                    "G": [0, 0, 0, 1],
+                },
             ),
         ],
         ids=["None", "custom"],
@@ -1769,7 +1903,15 @@ class TestCompressionModel_compress_dataframe:
 
     @pytest.mark.parametrize(
         "encoding_map",
-        [None, {"A": [0, 0, 0, 1], "B": [1, 0, 0, 0]}],
+        [
+            None,
+            {
+                "A": [1, 0, 0, 0],
+                "T": [1, 0, 0, 0],
+                "C": [0, 0, 0, 1],
+                "G": [0, 0, 0, 1],
+            },
+        ],
         ids=["None", "custom"],
     )
     def test_forward_encoding_map_when_CM_do_not_have_encoding_map(
@@ -1837,6 +1979,101 @@ class TestCompressionModel_compress_dataframe:
             )
         err = err_info.value
         assert err.reason == InvalidEncodingMapError.ReasonCode.MISSING_VALUE_NOT_ZERO
+
+
+class TestCompressionModel_compress_vcf_file:
+
+    def test_pass_arguments_to_read_vcf(self, mocker: MockerFixture):
+        custom_vcf_file = "custom_vcf_file"
+        custom_use_bases = "custom_use_bases"
+        custom_arker_id_format = "custom_arker_id_format"
+        custom_strict_gt = "custom_strict_gt"
+
+        fake_vcf_data = "fake_vcf_data"
+
+        mock_read_vcf = mocker.patch(
+            "deepcgp._core.compression.read_vcf", return_value=fake_vcf_data
+        )
+        mocker.patch("deepcgp._core.compression.build_vcf_encoding_map")
+
+        mock_compress_df = mocker.patch.object(CompressionModel, "compress_dataframe")
+
+        cm = CompressionModel()
+
+        cm.compress_vcf_file(
+            vcf_file=custom_vcf_file,
+            use_bases=custom_use_bases,  # pyright: ignore [reportArgumentType]
+            marker_id_format=custom_arker_id_format,  # pyright: ignore [reportArgumentType]
+            strict_gt=custom_strict_gt,  # pyright: ignore [reportArgumentType]
+        )
+
+        mock_read_vcf.assert_called_once_with(
+            vcf_file=custom_vcf_file,
+            use_bases=custom_use_bases,
+            marker_id_format=custom_arker_id_format,
+            strict_gt=custom_strict_gt,
+        )
+        mock_compress_df.assert_called_once()
+        assert mock_compress_df.call_args.kwargs["geno_dataframe"] == fake_vcf_data
+
+    def test_use_CM_encoding_map_when_available_and_encoding_map_is_none(
+        self, mocker: MockerFixture
+    ):
+        mocker.patch("deepcgp._core.compression.read_vcf")
+        mock_build_vcf_encoding_map = mocker.patch(
+            "deepcgp._core.compression.build_vcf_encoding_map"
+        )
+        mock_compress_df = mocker.patch.object(CompressionModel, "compress_dataframe")
+
+        cm = CompressionModel()
+        cm.encoding_map = {"A": [0.0]}
+
+        cm.compress_vcf_file(vcf_file="file.vcf")
+
+        mock_build_vcf_encoding_map.assert_not_called()
+        mock_compress_df.assert_called_once()
+        assert mock_compress_df.call_args.kwargs["encoding_map"] == cm.encoding_map
+
+    def test_build_encoding_map_when_CM_encoding_map_and_provided_encoding_map_is_none(
+        self, mocker: MockerFixture
+    ):
+        fake_vcf_data = "fake_vcf_data"
+        fake_encoding_map = "fake_encoding_map"
+
+        mocker.patch("deepcgp._core.compression.read_vcf", return_value=fake_vcf_data)
+        mock_build_vcf_encoding_map = mocker.patch(
+            "deepcgp._core.compression.build_vcf_encoding_map",
+            return_value=fake_encoding_map,
+        )
+        mock_compress_df = mocker.patch.object(CompressionModel, "compress_dataframe")
+
+        cm = CompressionModel()
+
+        cm.compress_vcf_file(vcf_file="file.vcf")
+
+        mock_build_vcf_encoding_map.assert_called_once_with(vcf_data=fake_vcf_data)
+        mock_compress_df.assert_called_once()
+        assert mock_compress_df.call_args.kwargs["encoding_map"] == fake_encoding_map
+
+    def test_forward_batch_size_and_returns_result_of_compress_dataframe(
+        self, mocker: MockerFixture
+    ):
+        custom_batch_size = 9999999
+        fake_compressed_data = "fake_compressed_data"
+
+        mocker.patch("deepcgp._core.compression.read_vcf")
+        mocker.patch("deepcgp._core.compression.build_vcf_encoding_map")
+        mock_compress_df = mocker.patch.object(
+            CompressionModel, "compress_dataframe", return_value=fake_compressed_data
+        )
+
+        cm = CompressionModel()
+
+        result = cm.compress_vcf_file(vcf_file="file.vcf", batch_size=custom_batch_size)
+
+        mock_compress_df.assert_called_once()
+        assert mock_compress_df.call_args.kwargs["batch_size"] == custom_batch_size
+        assert result == fake_compressed_data
 
 
 class Test_possible_first_layer_sizes:

@@ -3,7 +3,6 @@
 
 def create_model(input_shape):
     """TODO."""
-
     # lazy load keras
     from keras import regularizers
     from keras.layers import (

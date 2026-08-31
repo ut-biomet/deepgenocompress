@@ -9,3 +9,7 @@ dl.py.property {
   /* width: 300px; */
   max-width: 50%;
 }
+
+.admonition.note > p:not(.admonition-title):not(:last-child) {
+  margin-bottom: 1em;
+}
