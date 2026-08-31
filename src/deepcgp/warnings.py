@@ -7,10 +7,10 @@ catch any package-specific warnings.
 from ._core.compression import (
     ColumnPaddingWarning,
     IncompleteEncodingChunkWarning,
-    LessThanOneAlleleChunks,
+    LessThanOneAlleleChunksWarning,
     NonCompressiveAutoencoderWarning,
 )
-from ._core.data_processing import AllZerosEncodedWarning
+from ._core.data_processing import AllZerosEncodedWarning, UnmappedValuesWarning
 from ._core.warnings import DeepcgpWarning
 
 __all__ = [
@@ -18,6 +18,7 @@ __all__ = [
     "ColumnPaddingWarning",
     "DeepcgpWarning",
     "IncompleteEncodingChunkWarning",
-    "LessThanOneAlleleChunks",
+    "LessThanOneAlleleChunksWarning",
     "NonCompressiveAutoencoderWarning",
+    "UnmappedValuesWarning",
 ]

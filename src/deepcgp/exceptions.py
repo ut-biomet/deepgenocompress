@@ -25,13 +25,17 @@ from ._core.compression import (
     ModelStateError,
 )
 from ._core.data_processing import InvalidEncodingMapError
-from ._core.exceptions import DeepcgpError
+from ._core.exceptions import DeepcgpError, DuplicatedMarkerIDsError
+from ._core.vcf import InvalidVcfDataError, UnexpectedMarkerIdFormatError
 
 __all__ = [
     "CompressionModelConfigurationError",
     "DeepcgpError",
+    "DuplicatedMarkerIDsError",
     "IncompatibleDataError",
     "InvalidEncodingMapError",
+    "InvalidVcfDataError",
     "LayerSizesConfigurationError",
     "ModelStateError",
+    "UnexpectedMarkerIdFormatError",
 ]

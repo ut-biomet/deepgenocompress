@@ -19,10 +19,10 @@ python_checks:
 	basedpyright
 
 tests:
-	pytest -v
+	pytest -v -m ""
 
 doc:
 	make -C docs clean_quarto_pages && make -C docs quarto_pages
-	make -C docs clean && make -C docs html
+	make -C docs clean && make -C docs html SPHINXOPTS="$(SPHINXOPTS)" O="$(O)"
 doc_quick:
-	make -C docs clean && make -C docs html
+	make -C docs clean && make -C docs html SPHINXOPTS="$(SPHINXOPTS)" O="$(O)"

@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "cyvcf2>=0.34.0",
     "matplotlib>=3.10.8",
     "numpy>=2.4.4",
     "pandas>=3.0.2",
@@ -29,6 +30,7 @@ dev-no-exec = [
 
 test = [
     "pytest>=9.0.2",
+    "pytest-lazy-fixtures>=1.4.0",
     "pytest-mock>=3.15.1",
 ]
 
@@ -51,6 +53,11 @@ doc = [
 
 
 [tool.pytest.ini_options]
+markers = [
+    "upstream_watch: tests that track upstream library bugs; excluded by default",
+]
+addopts = "-m 'not upstream_watch'"
+
 filterwarnings = [
     "error"
 ]
@@ -106,6 +113,8 @@ extend-select = [
 "{playground,scratch,sandbox}*.py" = ["D","DOC", "TID", "ARG", "T20", "F401", "TID251"]
 "{playground,scratch,sandbox}*/**" = ["D","DOC", "TID", "ARG", "T20", "F401", "TID251"]
 
+"extra_stubs/**" = ["ALL"]
+
 
 
 [tool.ruff.lint.pydocstyle]
@@ -114,4 +123,4 @@ convention = "numpy"
 [tool.pyright]
 "typeCheckingMode" = "basic"
 exclude = ["source_material", "**/__pycache__", "**/.*"]
-
+stubPath = "extra_stubs"

@@ -1,7 +1,7 @@
 import pytest
 
-from deepcgp._core.utils import encoding_size
-from deepcgp.warnings import DeepcgpWarning
+from deepcgp.exceptions import UnexpectedMarkerIdFormatError
+from deepcgp.utils import MARKER_ID_FORMATS, build_marker_ids, encoding_size
 
 
 class TestEncodingSize:
@@ -22,5 +22,21 @@ class TestEncodingSize:
         assert encoding_size(encoding_map) == size
 
     def test_raises_on_empty_encoding_map(self):
-        with pytest.raises(StopIteration):
+        with pytest.raises(ValueError):
             encoding_size({})
+
+
+@pytest.mark.parametrize("format", MARKER_ID_FORMATS)
+def test_all_MARKER_ID_FORMATS_works_with_build_marker_ids(format):
+    # all MARKER_ID_FORMATS should be expected
+    marker_info = {
+        "chrom": "chr1",
+        "pos": 1234,
+        "id": "marker_1",
+        "ref": "T",
+        "alt": ["C", "A"],
+    }
+    try:
+        build_marker_ids(**marker_info, marker_id_format=format)
+    except UnexpectedMarkerIdFormatError as e:
+        pytest.fail(f"Unexpected UnexpectedMarkerIdFormatError raised: {e}")

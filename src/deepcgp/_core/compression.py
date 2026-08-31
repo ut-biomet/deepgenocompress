@@ -23,12 +23,14 @@ import logging
 import random
 from collections.abc import Collection, Mapping
 from enum import StrEnum, auto
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, TypedDict
 
 import numpy as np
 import pandas as pd
 
 from .utils import encoding_size
+from .vcf import _MARKER_ID_FORMAT, build_vcf_encoding_map, read_vcf
 
 if TYPE_CHECKING:
     from keras import Model
@@ -680,7 +682,7 @@ def _check_layer_size_and_encoding_compatibility(first_layer_size, encoding_size
         _deepcgp_warn(IncompleteEncodingChunkWarning(first_layer_size, encoding_size))
     if encoding_size >= first_layer_size:
         _deepcgp_warn(
-            LessThanOneAlleleChunks(
+            LessThanOneAlleleChunksWarning(
                 first_layer_size=first_layer_size, encoding_size=encoding_size
             )
         )
@@ -730,7 +732,7 @@ class IncompleteEncodingChunkWarning(DeepcgpWarning):
         )
 
 
-class LessThanOneAlleleChunks(DeepcgpWarning):
+class LessThanOneAlleleChunksWarning(DeepcgpWarning):
     """Issued when chuncks consist of only 1 alleles.
 
     Due to input layer size being smaler than the encoding size.
@@ -1346,10 +1348,10 @@ class CompressionModel:
         cls,
         training_dataframe: pd.DataFrame,
         encoding_map: Mapping[Any, list[float]] | None = None,
-        missing_values: Collection = {"N"},
+        missing_values: Collection = {},
         **kwargs,
-    ) -> "CompressionModel":
-        """Initialise a CompressionModel from a genotype DataFrame.
+    ) -> CompressionModel:
+        r"""Initialise a CompressionModel from a genotype DataFrame.
 
         Encodes the DataFrame into a genotype array and constructs a
         CompressionModel with the encoded data, encoding map, and marker index
@@ -1369,14 +1371,13 @@ class CompressionModel:
             Collection of values representing missing genotype calls. These are
             encoded as zero vectors rather than assigned a one-hot encoding.
             Defaults to ``{"N"}``.
-        **kwargs :
+        \*\*kwargs :
             Additional keyword arguments passed to :class:`CompressionModel`.
             ``training_encoded_geno_array`` cannot be passed, as it is derived
             from ``training_dataframe``.
 
         Returns
         -------
-        CompressionModel
             A new instance initialised with the encoded training data, encoding
             map, and marker index from ``training_dataframe``.
 
@@ -1426,6 +1427,96 @@ class CompressionModel:
             **kwargs,
         )
 
+    @classmethod
+    def from_vcf_file(
+        cls,
+        vcf_file: str | Path,
+        use_bases: bool = False,
+        marker_id_format: _MARKER_ID_FORMAT = "ref_alt",
+        strict_gt: bool = False,
+        encoding_map: Mapping[Any, list[float]] | None = None,
+        **kwargs,
+    ) -> CompressionModel:
+        r"""Initialise a CompressionModel from a VCF file.
+
+        Encodes the VCF file data into a genotype array and constructs a
+        CompressionModel with the encoded data, encoding map, and marker index
+        derived from the marker ids.
+
+        Parameters
+        ----------
+        vcf_file :
+            Path to the VCF file containing the training data.
+        use_bases :
+            Whether genotype values should be encoded as base-pair strings
+            (``True``) or as integers (``False``, the default). See:
+            :func:`read_vcf`
+        marker_id_format :
+            Format used to build each marker's column id. See
+            :func:`utils.build_marker_ids` for the available formats.
+        strict_gt :
+            :class:`cyvcf2.cyvcf2.VCF`'s argument to controls how partially missing
+            genotypes are handled:
+
+            - ``False`` (the default): partial missing values are encoded as ``1``
+            - ``True``: partial missing values are encoded as ``3``.
+
+            Has no effect when ``use_bases`` is ``True``.
+        encoding_map :
+            Mapping from allele values to their encoding vectors. If ``None``,
+            a one-hot encoding map is built automatically from the VCF data.
+            See :func:`build_vcf_encoding_map`.
+        \*\*kwargs :
+            Additional keyword arguments passed to :class:`CompressionModel`.
+            ``training_encoded_geno_array`` cannot be passed, as it is derived
+            from ``vcf_file``.
+
+        Returns
+        -------
+            A new instance initialised with the encoded training data, encoding
+            map, and marker index from ``vcf_file``.
+
+        Raises
+        ------
+        FileNotFoundError
+            If ``vcf_file`` does not exist.
+        DuplicatedMarkerIDsError
+            If the marker ids built from ``marker_id_format`` are not unique.
+        Exception
+            If parsing the VCF file with :class:`cyvcf2.cyvcf2.VCF` fails.
+        TypeError
+            If ``training_encoded_geno_array`` is passed as a keyword argument.
+        InvalidEncodingMapError
+            If the ``encoding_map`` is invalid (see :func:`encode_snp_array`)
+        LayerSizesConfigurationError
+            If the layer sizes are invalid
+
+        See Also
+        --------
+        :func:`read_vcf`: Builds a VCF DataFrame from a VCF file.
+        :func:`build_vcf_encoding_map` : Builds a one-hot encoding map from a VCF
+        DataFrame.
+        """
+        if "training_encoded_geno_array" in kwargs:
+            raise TypeError(
+                "`training_encoded_geno_array` cannot be passed as a keyword argument "
+                "it is derived from `training_dataframe`."
+            )
+
+        vcf_data = read_vcf(
+            vcf_file=vcf_file,
+            use_bases=use_bases,
+            marker_id_format=marker_id_format,
+            strict_gt=strict_gt,
+        )
+
+        if encoding_map is None:
+            encoding_map = build_vcf_encoding_map(vcf_data=vcf_data)
+
+        return cls.from_dataframe(
+            training_dataframe=vcf_data, encoding_map=encoding_map, **kwargs
+        )
+
     def fit(
         self,
         seed: int | None = None,
@@ -1449,16 +1540,18 @@ class CompressionModel:
             is generated and stored in :attr:`CompressionModel.seed`. Only affects data
             splitting, not weight initialisation.
 
-        Important
-        ---------
-        The seed only controls the data split, not the model weight initialisation or
-        the training process. Same seed can produce models with different weights.
+            .. important::
+                The seed only controls the data split, **not the model weight
+                initialisation or the training process**. The same seed can produce
+                models with different weights.
 
         Raises
         ------
         ModelStateError
+
             - If :attr:`CompressionModel.training_encoded_geno_array` is ``None``.
             - If :attr:`CompressionModel.layer_sizes` is not set.
+
         """
         from keras.optimizers import Adam
 
@@ -1643,6 +1736,7 @@ class CompressionModel:
             - If the set of ``geno_dataframe``'s columns index is different from
               the one from the training data (i.e.
               :attr:`CompressionModel.training_markers_index`)
+
             If ``geno_dataframe`` has a different number of markers than
             the training data.
         InvalidEncodingMapError
@@ -1667,6 +1761,88 @@ class CompressionModel:
             encoding_map=encoding_map or self.encoding_map,
         )
         return self.compress(encoded_geno_array, batch_size=batch_size)
+
+    def compress_vcf_file(
+        self,
+        vcf_file: str | Path,
+        use_bases: bool = False,
+        marker_id_format: _MARKER_ID_FORMAT = "ref_alt",
+        strict_gt: bool = False,
+        batch_size: int | None = None,
+        encoding_map: Mapping[Any, list[float]] | None = None,
+    ) -> NDArray[np.float32]:
+        """Compress vcf file data using the fitted autoencoders.
+
+        Encode the input vcf data to an array, splits the array into chunks matching
+        the training chunk size, runs each chunk through its corresponding encoder,
+        and returns the horizontally stacked compressed representations.
+
+        Parameters
+        ----------
+        vcf_file :
+            Path to the VCF file to compress.
+        use_bases :
+            Whether genotype values should be encoded as base-pair strings
+            (``True``) or as integers (``False``, the default). See:
+            :func:`read_vcf`
+        marker_id_format :
+            Format used to build each marker's column id. See
+            :func:`utils.build_marker_ids` for the available formats.
+        strict_gt :
+            :class:`cyvcf2.cyvcf2.VCF`'s argument to controls how partially missing
+            genotypes are handled:
+
+            - ``False`` (the default): partial missing values are encoded as ``1``
+            - ``True``: partial missing values are encoded as ``3``.
+
+            Has no effect when ``use_bases`` is ``True``.
+        batch_size :
+            (Optional) Batch size for encoder prediction. Defaults to
+            ``self.batch_size`` if not provided.
+        encoding_map :
+            (Optional) The encoding map to use for the encoding.
+            Defaults to ``None``, in which case the encoding will be done with:
+
+            1. :attr:`CompressionModel.encoding_map` if it is set.
+            2. Or, with :func:`build_vcf_encoding_map`
+
+        Returns
+        -------
+            Array of shape ``(n_samples, n_chunks * latent_dim)``,
+            where ``latent_dim`` is ``self.layer_sizes[-1]`` representing
+            the compressed genomic data.
+
+        Raises
+        ------
+        ModelStateError
+            If the model has not been fitted yet (i.e.
+            :attr:`CompressionModel.is_fitted` is ``False``).
+        IncompatibleDataError
+            - If the set of ``geno_dataframe``'s columns index is different from
+              the one from the training data (i.e.
+              :attr:`CompressionModel.training_markers_index`)
+
+            If ``geno_dataframe`` has a different number of markers than
+            the training data.
+        InvalidEncodingMapError
+            If the ``encoding_map`` is invalid (see :func:`encode_snp_array`)
+        """
+        vcf_data = read_vcf(
+            vcf_file=vcf_file,
+            use_bases=use_bases,
+            marker_id_format=marker_id_format,
+            strict_gt=strict_gt,
+        )
+
+        if encoding_map is None:
+            if self.encoding_map is not None:
+                encoding_map = self.encoding_map
+            else:
+                encoding_map = build_vcf_encoding_map(vcf_data=vcf_data)
+
+        return self.compress_dataframe(
+            geno_dataframe=vcf_data, batch_size=batch_size, encoding_map=encoding_map
+        )
 
 
 class LayerSizeOption(NamedTuple):
@@ -1763,19 +1939,6 @@ def possible_first_layer_sizes(
             desired_n_chunks=6
         ))
     """
-    # TODO: refact, doc, should this function returns the number of chunks too ????
-
-    # Return all numbers `possible_first_layer_size` such that:
-    #   - possible_first_layer_size is a multiple of enc_size
-    #   - possible_first_layer_size is a divisor of n_enc_cols
-
-    # Args:
-    #     n_enc_cols (int): the number that possible_first_layer_size must divide
-    #     enc_size (int): the number that possible_first_layer_size must be a multiple of
-
-    # Returns:
-    #     list[int]: all valid possible_first_layer_size values, sorted ascending
-
     options: list[LayerSizeOption] = []
 
     if n_encoded_colums <= 0 or encoding_size <= 0:

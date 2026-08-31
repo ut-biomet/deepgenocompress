@@ -8,6 +8,12 @@ https://www.sphinx-doc.org/en/master/usage/configuration.html#project-informatio
 """
 
 import os
+
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+os.environ.setdefault(
+    "TF_ENABLE_ONEDNN_OPTS", "0"
+)  # disable oneDNN to silences its warning
+
 import sys
 from importlib.metadata import version as pkg_version
 
@@ -49,6 +55,12 @@ intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
     "pandas": ("https://pandas.pydata.org/docs/", None),
+    "cyvcf2": ("https://brentp.github.io/cyvcf2/", None),
+}
+nitpicky = True
+nitpick_ignore_regex = {
+    # (r"py:class", r".*\._[A-Za-z_]*$"),  # any dotted path ending in ._Something
+    (r"py:class", r"^(?:[^.]*\.)*_\w*$"),  # any dotted path ending in ._Something
 }
 
 autodoc_default_options = {
