@@ -1,7 +1,7 @@
-"""Public exception hierarchy for deepcgp.
+"""Public exception hierarchy for deepgenocompress.
 
-All exceptions raised by deepcgp inherit from :class:`DeepcgpError`, allowing
-callers to catch any package-specific error with a single ``except`` clause.
+All exceptions raised by deepgenocompress inherit from :class:`DeepgenocompressError`,
+allowing callers to catch any package-specific error with a single ``except`` clause.
 Specific exceptions are defined alongside the code that raises them (see each
 class's source module), and re-exported here to provide a single, stable
 import location.
@@ -10,12 +10,12 @@ Examples
 --------
 .. jupyter-execute::
 
-    from deepcgp.exceptions import DeepcgpError
+    from deepgenocompress.exceptions import DeepgenocompressError
 
     try:
         ...
-    except DeepcgpError as e:
-        print(f"deepcgp failed: {e}")
+    except DeepgenocompressError as e:
+        print(f"deepgenocompress failed: {e}")
 """
 
 from ._core.compression import (
@@ -25,12 +25,12 @@ from ._core.compression import (
     ModelStateError,
 )
 from ._core.data_processing import InvalidEncodingMapError
-from ._core.exceptions import DeepcgpError, DuplicatedMarkerIDsError
+from ._core.exceptions import DeepgenocompressError, DuplicatedMarkerIDsError
 from ._core.vcf import InvalidVcfDataError, UnexpectedMarkerIdFormatError
 
 __all__ = [
     "CompressionModelConfigurationError",
-    "DeepcgpError",
+    "DeepgenocompressError",
     "DuplicatedMarkerIDsError",
     "IncompatibleDataError",
     "InvalidEncodingMapError",

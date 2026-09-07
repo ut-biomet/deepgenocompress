@@ -21,13 +21,13 @@ import numpy as np
 import pandas as pd
 from numpy.typing import ArrayLike, NDArray
 
-from deepcgp._core.exceptions import DeepcgpError, _type_fullname
-from deepcgp._core.warnings import DeepcgpWarning, _deepcgp_warn
+from deepgenocompress._core.exceptions import DeepgenocompressError, _type_fullname
+from deepgenocompress._core.warnings import DeepgenocompressWarning, _deepgc_warn
 
 from .utils import encoding_size
 
 
-class AllZerosEncodedWarning(DeepcgpWarning):
+class AllZerosEncodedWarning(DeepgenocompressWarning):
     """Issued when the encoded geno array only contains zeros.
 
     This indicate the genotype array was interpreted as conatining missing values only.
@@ -40,7 +40,7 @@ class AllZerosEncodedWarning(DeepcgpWarning):
         )
 
 
-class UnmappedValuesWarning(DeepcgpWarning):
+class UnmappedValuesWarning(DeepgenocompressWarning):
     """Issued when values in the data to encode has no explicit key in the encoding map.
 
     Such values are considered as "missing values" and will be encoded with a zero
@@ -99,7 +99,7 @@ def build_one_hot_encoding_map(
     .. jupyter-execute::
 
         import numpy as np
-        from deepcgp import build_one_hot_encoding_map
+        from deepgenocompress import build_one_hot_encoding_map
 
         # Array containing valid alleles, an excluded "N", and `None`
         geno_array = [
@@ -136,7 +136,7 @@ def build_one_hot_encoding_map(
     return enc_map
 
 
-class InvalidEncodingMapError(DeepcgpError):
+class InvalidEncodingMapError(DeepgenocompressError):
     """Raised when an encoding map is not valid.
 
     Instances are constructed with a :class:`ReasonCode` identifying which validation
@@ -334,7 +334,7 @@ def encode_snp_array(
     --------
     .. jupyter-execute::
 
-        from deepcgp import encode_snp_array
+        from deepgenocompress import encode_snp_array
         import numpy as np
 
         geno_array = np.array([["A", "C"], ["G", "T"]])
@@ -361,7 +361,7 @@ def encode_snp_array(
     unique_non_missing_values = {u for u in unique_values if not pd.isna(u)}
     unmapped_values = [v for v in unique_non_missing_values if v not in encoding_map]
     if len(unmapped_values) != 0:
-        _deepcgp_warn(UnmappedValuesWarning(unmapped_values))
+        _deepgc_warn(UnmappedValuesWarning(unmapped_values))
 
     encoding_length = encoding_size(encoding_map)
 
@@ -374,6 +374,6 @@ def encode_snp_array(
     encoded_geno = np.array(encoded_rows, dtype=np.float32)
 
     if not np.any(encoded_geno):
-        _deepcgp_warn(AllZerosEncodedWarning())
+        _deepgc_warn(AllZerosEncodedWarning())
 
     return encoded_geno

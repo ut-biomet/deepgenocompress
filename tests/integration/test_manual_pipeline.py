@@ -4,8 +4,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from deepcgp import CompressionModel, build_vcf_encoding_map, encode_snp_array, read_vcf
-from deepcgp.utils import encoding_size, possible_first_layer_sizes
+from deepgenocompress import (
+    CompressionModel,
+    build_vcf_encoding_map,
+    encode_snp_array,
+    read_vcf,
+)
+from deepgenocompress.utils import encoding_size, possible_first_layer_sizes
 
 
 def test_from_csv_to_compression():

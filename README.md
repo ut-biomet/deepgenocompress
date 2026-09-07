@@ -1,4 +1,4 @@
-# ConvCGP: A Convolutional Neural Network to Predict Genotypic Values of Rice Traits from Compressed Genome-Wide Polymorphisms
+# deepgenocompress: An AI-Driven Tool for Compressing Genome-Wide Polymorphisms in Plant Breeding
 
 > This repository continues the work made on https://github.com/tanzilamohita/ConvCGP by
 > @tanzilamohita.

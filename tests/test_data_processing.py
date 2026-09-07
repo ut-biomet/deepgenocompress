@@ -5,15 +5,15 @@ import pandas as pd
 import pytest
 from pytest_mock import MockerFixture
 
-from deepcgp._core.data_processing import (
+from deepgenocompress._core.data_processing import (
     AllZerosEncodedWarning,
     UnmappedValuesWarning,
     _validate_encoding_map,
     build_one_hot_encoding_map,
     encode_snp_array,
 )
-from deepcgp.exceptions import DeepcgpError, InvalidEncodingMapError
-from deepcgp.warnings import DeepcgpWarning
+from deepgenocompress.exceptions import DeepgenocompressError, InvalidEncodingMapError
+from deepgenocompress.warnings import DeepgenocompressWarning
 
 
 @pytest.fixture
@@ -68,8 +68,8 @@ def basic_geno_array_with_missing_values(missing_values_fixt):
 
 
 class TestAllZerosEncodedWarning:
-    def test_warning_is_DeepcgpWarning(self):
-        assert issubclass(AllZerosEncodedWarning, DeepcgpWarning)
+    def test_warning_is_DeepgenocompressWarning(self):
+        assert issubclass(AllZerosEncodedWarning, DeepgenocompressWarning)
 
     def test_warning_message(self):
         expected_msg = (
@@ -82,8 +82,8 @@ class TestAllZerosEncodedWarning:
 
 
 class TestInvalidEncodingMapError:
-    def test_error_is_DeepcgpError(self):
-        assert issubclass(InvalidEncodingMapError, DeepcgpError)
+    def test_error_is_DeepgenocompressError(self):
+        assert issubclass(InvalidEncodingMapError, DeepgenocompressError)
 
     def test_all_reason_codes_have_a_message(self):
         assert set(InvalidEncodingMapError._MESSAGES) == set(
@@ -527,7 +527,7 @@ class TestEncodeSnpArray:
     ):
         """Test build_one_hot_encoding_map is called with default parameters."""
         mock_build_one_hot_encoding_map = mocker.patch(
-            "deepcgp._core.data_processing.build_one_hot_encoding_map",
+            "deepgenocompress._core.data_processing.build_one_hot_encoding_map",
             wraps=build_one_hot_encoding_map,
         )
         encode_snp_array(basic_geno_array)
@@ -546,7 +546,7 @@ class TestEncodeSnpArray:
     ):
         """Test build_one_hot_encoding_map is called if encoding_map is None."""
         mock_build_one_hot_encoding_map = mocker.patch(
-            "deepcgp._core.data_processing.build_one_hot_encoding_map",
+            "deepgenocompress._core.data_processing.build_one_hot_encoding_map",
             wraps=build_one_hot_encoding_map,
         )
         encode_snp_array(
@@ -571,7 +571,7 @@ class TestEncodeSnpArray:
     ):
         """Test _validate_encoding_map is called encoding_map is provided."""
         mock_validate = mocker.patch(
-            "deepcgp._core.data_processing._validate_encoding_map",
+            "deepgenocompress._core.data_processing._validate_encoding_map",
             wraps=_validate_encoding_map,
         )
         encode_snp_array(
@@ -806,7 +806,7 @@ class TestEncodeSnpArray:
 
 
 def test_public_api_exports():
-    import deepcgp
+    import deepgenocompress
 
-    assert hasattr(deepcgp, "encode_snp_array")
-    assert hasattr(deepcgp, "build_one_hot_encoding_map")
+    assert hasattr(deepgenocompress, "encode_snp_array")
+    assert hasattr(deepgenocompress, "build_one_hot_encoding_map")

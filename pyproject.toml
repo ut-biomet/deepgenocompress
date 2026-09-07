@@ -1,7 +1,7 @@
 [project]
-name = "deepcgp"
+name = "deepgenocompress"
 version = "0.1.0"
-description = "A Convolutional Neural Network to Predict Genotypic Values from Compressed Genome-Wide Polymorphisms"
+description = "An AI-Driven Tool for Compressing Genome-Wide Polymorphisms in Plant Breeding"
 readme = "README.md"
 authors = [
     { name = "Tanzila Islam", email = "tanzilamohita@gmail.com" }
@@ -100,7 +100,7 @@ extend-select = [
 ]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
-"warnings.warn".msg = "Use deepcgp._base_warnings._deepcgp_warn() instead, to get the correct stacklevel automatically."
+"warnings.warn".msg = "Use deepgenocompress._core.warnings._deepgc_warn() instead, to get the correct stacklevel automatically."
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/test_**.py" = [

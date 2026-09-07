@@ -11,17 +11,17 @@ import numpy as np
 import pandas as pd
 from cyvcf2 import VCF
 
-from deepcgp._core.exceptions import (
-    DeepcgpError,
+from deepgenocompress._core.exceptions import (
+    DeepgenocompressError,
     DuplicatedMarkerIDsError,
     _type_fullname,
 )
-from deepcgp._core.utils import _MISSING, _Missing
+from deepgenocompress._core.utils import _MISSING, _Missing
 
 _MARKER_ID_FORMAT = Literal["id", "pos", "ref_alt", "alleles"]
 
 
-class UnexpectedMarkerIdFormatError(DeepcgpError, ValueError):
+class UnexpectedMarkerIdFormatError(DeepgenocompressError, ValueError):
     """Raised when provided marker_id_format is not expected."""
 
     class _Extra(TypedDict):
@@ -43,7 +43,7 @@ class UnexpectedMarkerIdFormatError(DeepcgpError, ValueError):
         )
 
 
-class InvalidVcfDataError(DeepcgpError, ValueError):
+class InvalidVcfDataError(DeepgenocompressError, ValueError):
     """Raised when a DataFrame is not valid VCF data.
 
     Instances are constructed with a :class:`ReasonCode` identifying which validation
@@ -780,8 +780,10 @@ def build_marker_ids(
 
     .. jupyter-execute::
 
-        from deepcgp.utils import MARKER_ID_FORMATS  # list of accepted marker_id_format
-        from deepcgp.utils import build_marker_ids
+        from deepgenocompress.utils import build_marker_ids
+
+        # get list of accepted marker_id_format
+        from deepgenocompress.utils import MARKER_ID_FORMATS
 
         marker_info = {
           "chrom": "chr1",
@@ -896,7 +898,7 @@ def build_vcf_encoding_map(vcf_data: pd.DataFrame) -> dict[Any, list[float]]:
 
         import pandas as pd
         from pprint import pprint
-        from deepcgp import build_vcf_encoding_map
+        from deepgenocompress import build_vcf_encoding_map
 
         vcf_data = pd.DataFrame(["A/T", "C|G"])
         vcf_data.attrs["use_bases"] = True

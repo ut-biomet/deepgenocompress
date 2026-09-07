@@ -1,10 +1,10 @@
 import pytest
 from helpers import get_all_subclasses
 
-import deepcgp.warnings as warnings_module
-from deepcgp._core.warnings import DeepcgpWarning
+import deepgenocompress.warnings as warnings_module
+from deepgenocompress._core.warnings import DeepgenocompressWarning
 
-custom_warnings = get_all_subclasses(DeepcgpWarning)
+custom_warnings = get_all_subclasses(DeepgenocompressWarning)
 
 
 @pytest.mark.parametrize(
@@ -25,5 +25,5 @@ def test_module_does_not_export_stale_names(exported_name):
     """Check that __all__ references something that actually exists."""
     assert hasattr(warnings_module, exported_name), (
         f"`{exported_name}` is listed in __all__ but not actually importable "
-        f"from deepcgp.warnings"
+        f"from deepgenocompress.warnings"
     )

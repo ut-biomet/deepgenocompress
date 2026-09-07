@@ -8,13 +8,13 @@ Classes
 -------
 AutoencoderModels
     Builds a symmetric autoencoder and its corresponding encoder from a list of
-    layer sizes. (Also available as ``deepcgp.AutoencoderModels``)
+    layer sizes. (Also available as ``deepgenocompress.AutoencoderModels``)
 
 CompressionModel
     Orchestrates data chunking, autoencoder construction, training, and
     compression. Splits the genotype data into chunks matching the first
     layer size, and fits one :class:`AutoencoderModels` instance per chunk.
-    (Also available as ``deepcgp.CompressionModel``)
+    (Also available as ``deepgenocompress.CompressionModel``)
 """
 
 from __future__ import annotations
@@ -39,8 +39,8 @@ if TYPE_CHECKING:
 from numpy.typing import ArrayLike, NDArray
 from sklearn.model_selection import train_test_split
 
-from deepcgp._core.exceptions import DeepcgpError, _type_fullname
-from deepcgp._core.warnings import DeepcgpWarning, _deepcgp_warn
+from deepgenocompress._core.exceptions import DeepgenocompressError, _type_fullname
+from deepgenocompress._core.warnings import DeepgenocompressWarning, _deepgc_warn
 
 from .data_processing import (
     _validate_encoding_map,
@@ -73,7 +73,7 @@ def _default_decoder_activation_functions(
     return _default_encoder_activation_functions(encoder_layers_sizes)
 
 
-class LayerSizesConfigurationError(DeepcgpError):
+class LayerSizesConfigurationError(DeepgenocompressError):
     """Raised when layer sizes configuration is not valid.
 
     Instances are constructed with a :class:`ReasonCode` identifying which validation
@@ -195,10 +195,10 @@ def _check_layer_sizes(layer_sizes):
                 },
             )
     if layer_sizes[-1] >= layer_sizes[0]:
-        _deepcgp_warn(NonCompressiveAutoencoderWarning(layer_sizes))
+        _deepgc_warn(NonCompressiveAutoencoderWarning(layer_sizes))
 
 
-class NonCompressiveAutoencoderWarning(DeepcgpWarning):
+class NonCompressiveAutoencoderWarning(DeepgenocompressWarning):
     """Issued when the autoencoder will increase data size.
 
     Due to the latent layer size being larger than the input size.
@@ -262,7 +262,7 @@ class AutoencoderModels:
 
     .. jupyter-execute::
 
-        from deepcgp import AutoencoderModels
+        from deepgenocompress import AutoencoderModels
 
         aem = AutoencoderModels([28, 14, 7, 3])
         aem.autoencoder.summary(print_fn=print)
@@ -286,7 +286,7 @@ class AutoencoderModels:
     """Is the model fitted?
 
     Note: this value is not synchronized with the actual model state, but updated
-    by this module when calling :meth:`deepcgp.CompressionModel.fit`.
+    by this module when calling :meth:`deepgenocompress.CompressionModel.fit`.
     Fitting the model manually will not update this value.
     """
 
@@ -345,7 +345,7 @@ class AutoencoderModels:
         )
 
 
-class ModelStateError(DeepcgpError):
+class ModelStateError(DeepgenocompressError):
     """Raised when model is not correctly prepared for the requested operation.
 
     Instances are constructed with a :class:`ReasonCode` identifying which state
@@ -398,7 +398,7 @@ class ModelStateError(DeepcgpError):
         super().__init__(message=message, extra={"reason": reason, **extra})
 
 
-class IncompatibleDataError(DeepcgpError):
+class IncompatibleDataError(DeepgenocompressError):
     """Raised when data to compress are incompatible with the model.
 
     Instances are constructed with a :class:`ReasonCode` identifying which compatibility
@@ -461,7 +461,7 @@ class IncompatibleDataError(DeepcgpError):
         super().__init__(message=message, extra={"reason": reason, **extra})
 
 
-class CompressionModelConfigurationError(DeepcgpError):
+class CompressionModelConfigurationError(DeepgenocompressError):
     """Raised when a :class:`CompressionModel` is configured with incompatible inputs.
 
     Instances are constructed with a :class:`ReasonCode` identifying which configuration
@@ -598,14 +598,14 @@ def _check_layer_size_and_encoded_data_size(n_cols, first_layer_size):
         will be required to fit the data into equal-sized chunks.
     """
     if n_cols % first_layer_size != 0:
-        _deepcgp_warn(
+        _deepgc_warn(
             ColumnPaddingWarning(
                 first_layer_size=first_layer_size, n_encoded_cols=n_cols
             )
         )
 
 
-class ColumnPaddingWarning(DeepcgpWarning):
+class ColumnPaddingWarning(DeepgenocompressWarning):
     """Issued when padding will be added to data.
 
     Due to missalignment between input layer size and number of encoded columns in data.
@@ -679,16 +679,16 @@ def _check_layer_size_and_encoding_compatibility(first_layer_size, encoding_size
         each chunk will consist of exactly one encoded allele.
     """
     if first_layer_size % encoding_size != 0:
-        _deepcgp_warn(IncompleteEncodingChunkWarning(first_layer_size, encoding_size))
+        _deepgc_warn(IncompleteEncodingChunkWarning(first_layer_size, encoding_size))
     if encoding_size >= first_layer_size:
-        _deepcgp_warn(
+        _deepgc_warn(
             LessThanOneAlleleChunksWarning(
                 first_layer_size=first_layer_size, encoding_size=encoding_size
             )
         )
 
 
-class IncompleteEncodingChunkWarning(DeepcgpWarning):
+class IncompleteEncodingChunkWarning(DeepgenocompressWarning):
     """Issued when chuncks will consist of incomplete encoded alleles.
 
     Due to missalignment between input layer size encoding size.
@@ -732,7 +732,7 @@ class IncompleteEncodingChunkWarning(DeepcgpWarning):
         )
 
 
-class LessThanOneAlleleChunksWarning(DeepcgpWarning):
+class LessThanOneAlleleChunksWarning(DeepgenocompressWarning):
     """Issued when chuncks consist of only 1 alleles.
 
     Due to input layer size being smaler than the encoding size.
@@ -1863,13 +1863,13 @@ def possible_first_layer_sizes(
 ) -> list[LayerSizeOption]:
     """Find first layer sizes perferctly compatible with the given data structure.
 
-    When instantiating a :class:`deepcgp.CompressionModel` both
-    :attr:`deepcgp.CompressionModel.layer_sizes` and
-    :attr:`deepcgp.CompressionModel.training_encoded_geno_array` are checked to be sure
-    the first layer size divide the number of training data's columns and is a multiple
-    of the encoding size, so that the data can be split into equally sized chunks
-    without padding or splitting encoded alleles across chunk boundaries. This functions
-    help find first layer sizes matching those properties for a given the data
+    When instantiating a :class:`deepgenocompress.CompressionModel` both
+    :attr:`deepgenocompress.CompressionModel.layer_sizes` and
+    :attr:`deepgenocompress.CompressionModel.training_encoded_geno_array` are checked to
+    be sure the first layer size divide the number of training data's columns and is a
+    multiple of the encoding size, so that the data can be split into equally sized
+    chunks without padding or splitting encoded alleles across chunk boundaries. This
+    functions help find first layer sizes matching those properties for a given the data
     structure.
 
     Parameters
@@ -1877,11 +1877,11 @@ def possible_first_layer_sizes(
     n_encoded_colums :
         Total number of columns in the encoded genotype array. Candidate first-layer
         sizes must evenly divide this value to avoid
-        :class:`deepcgp.warnings.ColumnPaddingWarning`
+        :class:`deepgenocompress.warnings.ColumnPaddingWarning`
     encoding_size :
         Number of columns used to encode a single allele. Candidate first-layer
         sizes must be a multiple of this value to avoid
-        :class:`deepcgp.warnings.IncompleteEncodingChunkWarning`
+        :class:`deepgenocompress.warnings.IncompleteEncodingChunkWarning`
     desired_n_chunks :
         If provided, narrow the returned options down to the one(s) whose resulting
         chunk count is closest to this value. If ``None``, all valid options are
@@ -1898,14 +1898,14 @@ def possible_first_layer_sizes(
 
     Warns
     -----
-    deepcgp.warnings.DeepcgpWarning
+    deepgenocompress.warnings.DeepgenocompressWarning
         If ``n_encoded_colums`` or ``encoding_size`` are not positive. No valid
         first-layer size can exist in that case, and an empty list is returned.
 
     See Also
     --------
-    :class:`deepcgp.warnings.ColumnPaddingWarning`
-    :class:`deepcgp.warnings.IncompleteEncodingChunkWarning`
+    :class:`deepgenocompress.warnings.ColumnPaddingWarning`
+    :class:`deepgenocompress.warnings.IncompleteEncodingChunkWarning`
 
     Examples
     --------
@@ -1915,7 +1915,7 @@ def possible_first_layer_sizes(
     .. jupyter-execute::
 
         from pprint import pprint
-        from deepcgp.utils import possible_first_layer_sizes
+        from deepgenocompress.utils import possible_first_layer_sizes
 
         pprint(
             possible_first_layer_sizes(n_encoded_colums=60, encoding_size=5)
@@ -1945,7 +1945,7 @@ def possible_first_layer_sizes(
         # invalid cases
         # especially encoding_size must be positive for the while loop below
         # to end, and != 0 for the modulo operation
-        _deepcgp_warn(
+        _deepgc_warn(
             "possible_first_layer_sizes() called with invalid inputs, "
             f"n_encoded_colums <= 0 ({n_encoded_colums}) or "
             f"encoding_size <= 0 ({encoding_size}). "

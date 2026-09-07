@@ -1,7 +1,7 @@
 import pytest
 
-from deepcgp.exceptions import UnexpectedMarkerIdFormatError
-from deepcgp.utils import MARKER_ID_FORMATS, build_marker_ids, encoding_size
+from deepgenocompress.exceptions import UnexpectedMarkerIdFormatError
+from deepgenocompress.utils import MARKER_ID_FORMATS, build_marker_ids, encoding_size
 
 
 class TestEncodingSize:
