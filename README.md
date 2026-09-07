@@ -68,14 +68,15 @@ is also provided, for nix users go directly to the [Nix section](#nix-optional) 
 
 The makes commands will probbly fail on a Windows environment (maybe try with Git Bash).
 
-| Task                                                                                                                                    | Command                  |
-| --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| Run tests                                                                                                                               | `make tests`             |
-| Lint and type-check the code (using [`ruff`](https://docs.astral.sh/ruff/) and [`basedpyright`](https://docs.basedpyright.com/latest/)) | `make python_checks`     |
-| Build the documentation                                                                                                                 | `make doc`               |
-| Format the code                                                                                                                         | `make format`            |
-| Add a new dependency                                                                                                                    | `uv add <package>`       |
-| Add a dev dependency                                                                                                                    | `uv add --dev <package>` |
+| Task                                                                                                                                    | Command                                 |
+| --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| Run tests                                                                                                                               | `make tests`                            |
+| Lint and type-check the code (using [`ruff`](https://docs.astral.sh/ruff/) and [`basedpyright`](https://docs.basedpyright.com/latest/)) | `make python_checks`                    |
+| Build the documentation                                                                                                                 | `make doc`                              |
+| Format the code                                                                                                                         | `make format`                           |
+| Bupm package version                                                                                                                    | `make bump_version_<major/minor/patch>` |
+| Add a new dependency                                                                                                                    | `uv add <package>`                      |
+| Add a dev dependency                                                                                                                    | `uv add --dev <package>`                |
 
 ### Nix (optional)
 

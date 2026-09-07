@@ -33,3 +33,5 @@ __all__ = [
     "validate_vcf_data",
     "warnings",
 ]
+
+__version__ = "0.1.0"

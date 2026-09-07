@@ -16,6 +16,14 @@ dependencies = [
     "tensorflow>=2.21.0",
 ]
 
+[tool.bumpversion]
+current_version = "0.1.0"
+
+[[tool.bumpversion.files]]
+filename = "src/deepgenocompress/__init__.py"
+search = '__version__ = "{current_version}"'
+replace = '__version__ = "{new_version}"'
+
 [dependency-groups]
 dev = [
   {include-group = "dev-no-exec"},
@@ -26,6 +34,7 @@ dev-no-exec = [
   {include-group = "test"},
   {include-group = "doc"},
   "types-tensorflow>=2.18.0.20260402",
+  "bump-my-version>=1.5.1",
 ]
 
 test = [
