@@ -42,7 +42,7 @@
             cudaPackages.cudnn
 
             # code formatter / linter / lsp
-            nixfmt-rfc-style
+            nixfmt
             isort
             black
             ruff
