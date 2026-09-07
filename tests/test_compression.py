@@ -12,7 +12,7 @@ from keras.callbacks import EarlyStopping, History
 from pytest_mock import MockerFixture
 from sklearn.model_selection import train_test_split
 
-from deepcgp._core.compression import (
+from deepgenocompress._core.compression import (
     AutoencoderModels,
     CompressionModel,
     LayerSizeOption,
@@ -21,25 +21,25 @@ from deepcgp._core.compression import (
     _split_data,
     possible_first_layer_sizes,
 )
-from deepcgp._core.data_processing import (
+from deepgenocompress._core.data_processing import (
     UnmappedValuesWarning,
     _validate_encoding_map,
     build_one_hot_encoding_map,
     encode_snp_array,
 )
-from deepcgp.exceptions import (
+from deepgenocompress.exceptions import (
     CompressionModelConfigurationError,
-    DeepcgpError,
+    DeepgenocompressError,
     IncompatibleDataError,
     InvalidEncodingMapError,
     LayerSizesConfigurationError,
     ModelStateError,
 )
-from deepcgp.utils import encoding_size
-from deepcgp.warnings import (
+from deepgenocompress.utils import encoding_size
+from deepgenocompress.warnings import (
     AllZerosEncodedWarning,
     ColumnPaddingWarning,
-    DeepcgpWarning,
+    DeepgenocompressWarning,
     IncompleteEncodingChunkWarning,
     LessThanOneAlleleChunksWarning,
     NonCompressiveAutoencoderWarning,
@@ -63,8 +63,8 @@ def basic_autoencoder_models(layer_sizes):
 
 
 class TestNonCompressiveAutoencoderWarning:
-    def test_warning_is_DeepcgpWarning(self):
-        assert issubclass(NonCompressiveAutoencoderWarning, DeepcgpWarning)
+    def test_warning_is_DeepgenocompressWarning(self):
+        assert issubclass(NonCompressiveAutoencoderWarning, DeepgenocompressWarning)
 
     def test_warning_message(self):
         expected_msg = (
@@ -83,8 +83,8 @@ class TestNonCompressiveAutoencoderWarning:
 
 
 class TestColumnPaddingWarning:
-    def test_warning_is_DeepcgpWarning(self):
-        assert issubclass(ColumnPaddingWarning, DeepcgpWarning)
+    def test_warning_is_DeepgenocompressWarning(self):
+        assert issubclass(ColumnPaddingWarning, DeepgenocompressWarning)
 
     def test_warning_message(self):
         expected_msg = (
@@ -104,8 +104,8 @@ class TestColumnPaddingWarning:
 
 
 class TestIncompleteEncodingChunkWarning:
-    def test_warning_is_DeepcgpWarning(self):
-        assert issubclass(IncompleteEncodingChunkWarning, DeepcgpWarning)
+    def test_warning_is_DeepgenocompressWarning(self):
+        assert issubclass(IncompleteEncodingChunkWarning, DeepgenocompressWarning)
 
     def test_warning_message(self):
         expected_msg = (
@@ -125,8 +125,8 @@ class TestIncompleteEncodingChunkWarning:
 
 
 class TestLessThanOneAlleleChunks:
-    def test_warning_is_DeepcgpWarning(self):
-        assert issubclass(LessThanOneAlleleChunksWarning, DeepcgpWarning)
+    def test_warning_is_DeepgenocompressWarning(self):
+        assert issubclass(LessThanOneAlleleChunksWarning, DeepgenocompressWarning)
 
     def test_warning_message(self):
         expected_msg = (
@@ -146,8 +146,8 @@ class TestLessThanOneAlleleChunks:
 
 
 class TestLayerSizesConfigurationError:
-    def test_error_is_DeepcgpError(self):
-        assert issubclass(LayerSizesConfigurationError, DeepcgpError)
+    def test_error_is_DeepgenocompressError(self):
+        assert issubclass(LayerSizesConfigurationError, DeepgenocompressError)
 
     def test_all_reason_codes_have_a_message(self):
         assert set(LayerSizesConfigurationError._MESSAGES) == set(
@@ -202,8 +202,8 @@ class TestLayerSizesConfigurationError:
 
 
 class TestModelStateError:
-    def test_error_is_DeepcgpError(self):
-        assert issubclass(ModelStateError, DeepcgpError)
+    def test_error_is_DeepgenocompressError(self):
+        assert issubclass(ModelStateError, DeepgenocompressError)
 
     def test_all_reason_codes_have_a_message(self):
         assert set(ModelStateError._MESSAGES) == set(ModelStateError.ReasonCode)
@@ -242,8 +242,8 @@ class TestModelStateError:
 
 
 class TestIncompatibleDataError:
-    def test_error_is_DeepcgpError(self):
-        assert issubclass(IncompatibleDataError, DeepcgpError)
+    def test_error_is_DeepgenocompressError(self):
+        assert issubclass(IncompatibleDataError, DeepgenocompressError)
 
     def test_all_reason_codes_have_a_message(self):
         assert set(IncompatibleDataError._MESSAGES) == set(
@@ -298,8 +298,8 @@ class TestIncompatibleDataError:
 
 class TestCompressionModelConfigurationError:
 
-    def test_error_is_DeepcgpError(self):
-        assert issubclass(CompressionModelConfigurationError, DeepcgpError)
+    def test_error_is_DeepgenocompressError(self):
+        assert issubclass(CompressionModelConfigurationError, DeepgenocompressError)
 
     def test_all_reason_codes_have_a_message(self):
         assert set(CompressionModelConfigurationError._MESSAGES) == set(
@@ -1009,7 +1009,7 @@ class TestCompressionModel_initialisation_from_dataframe:
         self, basic_training_data: TrainingDataFixture, mocker: MockerFixture
     ):
         mock_validate_encoding_map = mocker.patch(
-            "deepcgp._core.data_processing._validate_encoding_map",
+            "deepgenocompress._core.data_processing._validate_encoding_map",
             wraps=_validate_encoding_map,
         )
 
@@ -1118,9 +1118,11 @@ class TestCompressionModel_initialisation_from_vcf_file:
         fake_vcf_data = "fake_vcf_data"
         fake_encoding_map = "fake_encoding_map"
 
-        mocker.patch("deepcgp._core.compression.read_vcf", return_value=fake_vcf_data)
+        mocker.patch(
+            "deepgenocompress._core.compression.read_vcf", return_value=fake_vcf_data
+        )
         mock_build_vcf_encoding_map = mocker.patch(
-            "deepcgp._core.compression.build_vcf_encoding_map",
+            "deepgenocompress._core.compression.build_vcf_encoding_map",
             return_value=fake_encoding_map,
         )
         mock_from_df = mocker.patch.object(CompressionModel, "from_dataframe")
@@ -1135,9 +1137,11 @@ class TestCompressionModel_initialisation_from_vcf_file:
         fake_vcf_data = "fake_vcf_data"
         custom_encoding_map = {"A": [0.0]}
 
-        mocker.patch("deepcgp._core.compression.read_vcf", return_value=fake_vcf_data)
+        mocker.patch(
+            "deepgenocompress._core.compression.read_vcf", return_value=fake_vcf_data
+        )
         mock_build_vcf_encoding_map = mocker.patch(
-            "deepcgp._core.compression.build_vcf_encoding_map"
+            "deepgenocompress._core.compression.build_vcf_encoding_map"
         )
         mock_from_df = mocker.patch.object(CompressionModel, "from_dataframe")
 
@@ -1156,10 +1160,10 @@ class TestCompressionModel_initialisation_from_vcf_file:
         fake_vcf_data = "fake_vcf_data"
 
         mock_read_vcf = mocker.patch(
-            "deepcgp._core.compression.read_vcf", return_value=fake_vcf_data
+            "deepgenocompress._core.compression.read_vcf", return_value=fake_vcf_data
         )
 
-        mocker.patch("deepcgp._core.compression.build_vcf_encoding_map")
+        mocker.patch("deepgenocompress._core.compression.build_vcf_encoding_map")
         mock_from_df = mocker.patch.object(CompressionModel, "from_dataframe")
 
         CompressionModel.from_vcf_file(
@@ -1181,8 +1185,8 @@ class TestCompressionModel_initialisation_from_vcf_file:
     def test_forward_kwargs_to_from_dataframe(self, mocker: MockerFixture):
         custom_vcf_file = "custom_vcf_file"
 
-        mocker.patch("deepcgp._core.compression.read_vcf")
-        mocker.patch("deepcgp._core.compression.build_vcf_encoding_map")
+        mocker.patch("deepgenocompress._core.compression.read_vcf")
+        mocker.patch("deepgenocompress._core.compression.build_vcf_encoding_map")
         mock_from_df = mocker.patch.object(CompressionModel, "from_dataframe")
 
         CompressionModel.from_vcf_file(vcf_file=custom_vcf_file, x="x", y="y")
@@ -1193,8 +1197,8 @@ class TestCompressionModel_initialisation_from_vcf_file:
     def test_returns_result_of_from_dataframe_classmethod(self, mocker: MockerFixture):
         fake_CompressionModel = "fake_CompressionModel"
 
-        mocker.patch("deepcgp._core.compression.read_vcf")
-        mocker.patch("deepcgp._core.compression.build_vcf_encoding_map")
+        mocker.patch("deepgenocompress._core.compression.read_vcf")
+        mocker.patch("deepgenocompress._core.compression.build_vcf_encoding_map")
         mock_from_df = mocker.patch.object(
             CompressionModel, "from_dataframe", return_value=fake_CompressionModel
         )
@@ -1494,7 +1498,7 @@ class TestCompressionModel_fit:
             return aem
 
         mock_aem_class = mocker.patch(
-            "deepcgp._core.compression.AutoencoderModels", side_effect=fake_aem
+            "deepgenocompress._core.compression.AutoencoderModels", side_effect=fake_aem
         )
 
         model = CompressionModel(
@@ -1537,7 +1541,8 @@ class TestCompressionModel_fit:
         )
 
         mock_test_train_split = mocker.patch(
-            "deepcgp._core.compression.train_test_split", wraps=train_test_split
+            "deepgenocompress._core.compression.train_test_split",
+            wraps=train_test_split,
         )
         model.fit()
         calls = mock_test_train_split.call_args_list
@@ -1563,7 +1568,8 @@ class TestCompressionModel_fit:
         )
 
         mock_test_train_split = mocker.patch(
-            "deepcgp._core.compression.train_test_split", wraps=train_test_split
+            "deepgenocompress._core.compression.train_test_split",
+            wraps=train_test_split,
         )
         model.fit()
         calls = mock_test_train_split.call_args_list
@@ -1589,7 +1595,8 @@ class TestCompressionModel_fit:
         )
 
         mock_test_train_split = mocker.patch(
-            "deepcgp._core.compression.train_test_split", wraps=train_test_split
+            "deepgenocompress._core.compression.train_test_split",
+            wraps=train_test_split,
         )
         model.fit()
         calls = mock_test_train_split.call_args_list
@@ -1615,7 +1622,8 @@ class TestCompressionModel_fit:
         )
 
         mock_test_train_split = mocker.patch(
-            "deepcgp._core.compression.train_test_split", wraps=train_test_split
+            "deepgenocompress._core.compression.train_test_split",
+            wraps=train_test_split,
         )
         model.fit(seed=rng_seed)
         calls = mock_test_train_split.call_args_list
@@ -1827,7 +1835,7 @@ class TestCompressionModel_compress_dataframe:
         assert not shuffled_df.columns.equals(basic_training_data.dataframe.columns)
 
         mock_encode_snp_array = mocker.patch(
-            "deepcgp._core.compression.encode_snp_array",
+            "deepgenocompress._core.compression.encode_snp_array",
             wraps=encode_snp_array,
         )
         fitted_compression_model.compress_dataframe(shuffled_df)
@@ -1888,7 +1896,7 @@ class TestCompressionModel_compress_dataframe:
             expected_encoding_map = fitted_compression_model.encoding_map
 
         mock_encode_snp_array = mocker.patch(
-            "deepcgp._core.compression.encode_snp_array",
+            "deepgenocompress._core.compression.encode_snp_array",
             wraps=encode_snp_array,
         )
 
@@ -1926,7 +1934,7 @@ class TestCompressionModel_compress_dataframe:
         fitted_compression_model.encoding_map = None
 
         mock_encode_snp_array = mocker.patch(
-            "deepcgp._core.compression.encode_snp_array",
+            "deepgenocompress._core.compression.encode_snp_array",
             wraps=encode_snp_array,
         )
 
@@ -1943,7 +1951,7 @@ class TestCompressionModel_compress_dataframe:
         mocker: MockerFixture,
     ):
         mock_encode_snp_array = mocker.patch(
-            "deepcgp._core.compression.encode_snp_array",
+            "deepgenocompress._core.compression.encode_snp_array",
             wraps=encode_snp_array,
         )
 
@@ -1958,7 +1966,7 @@ class TestCompressionModel_compress_dataframe:
         mocker: MockerFixture,
     ):
         mock_encode_snp_array = mocker.patch(
-            "deepcgp._core.compression.encode_snp_array",
+            "deepgenocompress._core.compression.encode_snp_array",
             wraps=encode_snp_array,
         )
 
@@ -1992,9 +2000,9 @@ class TestCompressionModel_compress_vcf_file:
         fake_vcf_data = "fake_vcf_data"
 
         mock_read_vcf = mocker.patch(
-            "deepcgp._core.compression.read_vcf", return_value=fake_vcf_data
+            "deepgenocompress._core.compression.read_vcf", return_value=fake_vcf_data
         )
-        mocker.patch("deepcgp._core.compression.build_vcf_encoding_map")
+        mocker.patch("deepgenocompress._core.compression.build_vcf_encoding_map")
 
         mock_compress_df = mocker.patch.object(CompressionModel, "compress_dataframe")
 
@@ -2019,9 +2027,9 @@ class TestCompressionModel_compress_vcf_file:
     def test_use_CM_encoding_map_when_available_and_encoding_map_is_none(
         self, mocker: MockerFixture
     ):
-        mocker.patch("deepcgp._core.compression.read_vcf")
+        mocker.patch("deepgenocompress._core.compression.read_vcf")
         mock_build_vcf_encoding_map = mocker.patch(
-            "deepcgp._core.compression.build_vcf_encoding_map"
+            "deepgenocompress._core.compression.build_vcf_encoding_map"
         )
         mock_compress_df = mocker.patch.object(CompressionModel, "compress_dataframe")
 
@@ -2040,9 +2048,11 @@ class TestCompressionModel_compress_vcf_file:
         fake_vcf_data = "fake_vcf_data"
         fake_encoding_map = "fake_encoding_map"
 
-        mocker.patch("deepcgp._core.compression.read_vcf", return_value=fake_vcf_data)
+        mocker.patch(
+            "deepgenocompress._core.compression.read_vcf", return_value=fake_vcf_data
+        )
         mock_build_vcf_encoding_map = mocker.patch(
-            "deepcgp._core.compression.build_vcf_encoding_map",
+            "deepgenocompress._core.compression.build_vcf_encoding_map",
             return_value=fake_encoding_map,
         )
         mock_compress_df = mocker.patch.object(CompressionModel, "compress_dataframe")
@@ -2061,8 +2071,8 @@ class TestCompressionModel_compress_vcf_file:
         custom_batch_size = 9999999
         fake_compressed_data = "fake_compressed_data"
 
-        mocker.patch("deepcgp._core.compression.read_vcf")
-        mocker.patch("deepcgp._core.compression.build_vcf_encoding_map")
+        mocker.patch("deepgenocompress._core.compression.read_vcf")
+        mocker.patch("deepgenocompress._core.compression.build_vcf_encoding_map")
         mock_compress_df = mocker.patch.object(
             CompressionModel, "compress_dataframe", return_value=fake_compressed_data
         )
@@ -2187,32 +2197,32 @@ class Test_possible_first_layer_sizes:
         assert result == [LayerSizeOption(5, 1)]
 
     def test_encoding_size_zero(self):
-        with pytest.warns(DeepcgpWarning) as warns:
+        with pytest.warns(DeepgenocompressWarning) as warns:
             result = possible_first_layer_sizes(n_encoded_colums=60, encoding_size=0)
         assert result == []
         assert "encoding_size <= 0 (0)" in str(warns[0].message)
 
     def test_negative_encoding_size(self):
-        with pytest.warns(DeepcgpWarning) as warns:
+        with pytest.warns(DeepgenocompressWarning) as warns:
             result = possible_first_layer_sizes(n_encoded_colums=60, encoding_size=-1)
         assert result == []
         assert "encoding_size <= 0 (-1)" in str(warns[0].message)
 
     def test_n_encoded_colums_zero(self):
-        with pytest.warns(DeepcgpWarning) as warns:
+        with pytest.warns(DeepgenocompressWarning) as warns:
             result = possible_first_layer_sizes(n_encoded_colums=0, encoding_size=6)
         assert result == []
         assert "n_encoded_colums <= 0 (0)" in str(warns[0].message)
 
     def test_negative_n_encoded_colums(self):
-        with pytest.warns(DeepcgpWarning) as warns:
+        with pytest.warns(DeepgenocompressWarning) as warns:
             result = possible_first_layer_sizes(n_encoded_colums=-60, encoding_size=6)
         assert result == []
         assert "n_encoded_colums <= 0 (-60)" in str(warns[0].message)
 
 
 def test_public_api_exports():
-    import deepcgp
+    import deepgenocompress
 
-    assert hasattr(deepcgp, "CompressionModel")
-    assert hasattr(deepcgp, "AutoencoderModels")
+    assert hasattr(deepgenocompress, "CompressionModel")
+    assert hasattr(deepgenocompress, "AutoencoderModels")

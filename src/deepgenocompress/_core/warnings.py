@@ -1,4 +1,4 @@
-"""Warnings related to deepcgp library."""
+"""Warnings related to deepgenocompress library."""
 
 import os
 import warnings
@@ -8,8 +8,8 @@ from typing import Any, overload
 _LIBRARY_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-class DeepcgpWarning(UserWarning):
-    """Base warning class for all deepcgp's warnings."""
+class DeepgenocompressWarning(UserWarning):
+    """Base warning class for all deepgenocompress's warnings."""
 
     message: str
     """Warning message."""
@@ -36,19 +36,19 @@ class DeepcgpWarning(UserWarning):
 
 
 @overload
-def _deepcgp_warn(
+def _deepgc_warn(
     message: str,
     category: type[Warning] | None = ...,
 ) -> None: ...
 @overload
-def _deepcgp_warn(
+def _deepgc_warn(
     message: Warning,
     category: Any = ...,
 ) -> None: ...
-def _deepcgp_warn(message, category=None) -> None:
-    """Issue a DeepcgpWarning warning."""
+def _deepgc_warn(message, category=None) -> None:
+    """Issue a DeepgenocompressWarning warning."""
     if category is None:
-        category = DeepcgpWarning
+        category = DeepgenocompressWarning
     warnings.warn(  # noqa: TID251
         message=message, category=category, skip_file_prefixes=(_LIBRARY_DIR,)
     )

@@ -25,14 +25,14 @@ os.environ["PYTHONPATH"] = ":".join((package_path, os.environ.get("PYTHONPATH", 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 
-project = "deepcgp"
+project = "deepgenocompress"
 copyright = (
     " 2026, Laboratory of Biometry and Bioinformatics,"
     "Department of Agricultural and Environmental Biology,"
     "Graduate School of Agricultural and Life Science, The University of Tokyo"
 )
 author = "Tanzila Islam"
-release = pkg_version("deepcgp")
+release = pkg_version("deepgenocompress")
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

@@ -3,19 +3,19 @@ title: Usage Example
 jupyter: python3
 ---
 
-This page presents a simple usage of `deepcgp` package.
+This page presents a simple usage of `deepgenocompress` package.
 
 ## Imports and basic script initialisation
 
 ### Logging
 
-`deepcgp` can log information for some calculation. To enable the logging we
+`deepgenocompress` can log information for some calculation. To enable the logging we
 have to setup using `logging`.
 
 ```{python}
 import logging
 logging.basicConfig(level=logging.INFO)
-logging.getLogger("deepcgp").setLevel(logging.INFO)
+logging.getLogger("deepgenocompress").setLevel(logging.INFO)
 ```
 
 Also to make the outputs of this example less noisy we will disable some
@@ -29,14 +29,14 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 ### Used libraries
 
-For this example, `pandas` (dependency of `deepcgp`) is used for importing the
+For this example, `pandas` (dependency of `deepgenocompress`) is used for importing the
 data and `pprint` for prettier display of data structures.
 
 ```{python}
 from pprint import pprint
 
 import pandas as pd
-import deepcgp
+import deepgenocompress
 ```
 
 
@@ -66,7 +66,7 @@ function to automatically generate one from the data.
 
 ```{python}
 data_array = data.to_numpy()
-encoding_map = deepcgp.build_one_hot_encoding_map(geno_array = data_array, missing_values=["N"])
+encoding_map = deepgenocompress.build_one_hot_encoding_map(geno_array = data_array, missing_values=["N"])
 ```
 
 The encoding map dictionary is:
@@ -83,7 +83,7 @@ as "`{python} list(encoding_map.values())[-1]`".
 Now that we have the encoding map, we can encode the data using the `encode_snp_array` function.
 
 ```{python}
-encoded_data = deepcgp.encode_snp_array(
+encoded_data = deepgenocompress.encode_snp_array(
   geno_array = data_array,
   encoding_map = encoding_map,
 )
@@ -96,7 +96,7 @@ The encoded data now have `{python} encoded_data.shape[0]` lines,
 ### Create the compression model
 
 Now that we have the encoded data ready to be used by neural networks, we can set up the
-"compression model". `deepcgp` provides the `CompressionModel` class for that.
+"compression model". `deepgenocompress` provides the `CompressionModel` class for that.
 
 
 Here we initialise the compression model by specifying:
@@ -109,7 +109,7 @@ Here we initialise the compression model by specifying:
 
 
 ```{python}
-cm = deepcgp.CompressionModel(
+cm = deepgenocompress.CompressionModel(
     training_encoded_geno_array=encoded_data,
     encoding_map=encoding_map,
     layer_sizes=[14, 7, 3],
@@ -154,7 +154,7 @@ If you don't need to inspect or reuse the encoding map and encoded array, the
 
 ```{python}
 #| eval: false
-cm = deepcgp.CompressionModel.from_dataframe(
+cm = deepgenocompress.CompressionModel.from_dataframe(
     training_dataframe=data,
     # encoding_map=None, # to pass a custom encoding_map
     layer_sizes=[14, 7, 3],

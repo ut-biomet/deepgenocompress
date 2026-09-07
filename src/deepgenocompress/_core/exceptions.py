@@ -1,4 +1,4 @@
-"""Exceptions related to deepcgp library."""
+"""Exceptions related to deepgenocompress library."""
 
 import reprlib
 from pprint import pformat
@@ -17,8 +17,8 @@ class _Raw:
         return self.text
 
 
-class DeepcgpError(Exception):
-    """Base exception class for all deepcgp's errors."""
+class DeepgenocompressError(Exception):
+    """Base exception class for all deepgenocompress's errors."""
 
     message: str
     """Error message"""
@@ -47,7 +47,7 @@ class DeepcgpError(Exception):
         return self.message
 
 
-class DuplicatedMarkerIDsError(DeepcgpError):
+class DuplicatedMarkerIDsError(DeepgenocompressError):
     """Raised when provided data does not have unique marker ids."""
 
     class _Extra(TypedDict, total=True):

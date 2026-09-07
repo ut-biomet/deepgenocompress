@@ -9,8 +9,8 @@ from cyvcf2 import VCF
 from pytest_lazy_fixtures import lf
 from pytest_mock import MockerFixture
 
-from deepcgp._core.data_processing import _validate_encoding_map
-from deepcgp._core.vcf import (
+from deepgenocompress._core.data_processing import _validate_encoding_map
+from deepgenocompress._core.vcf import (
     _MARKER_ID_FORMAT,
     DuplicatedMarkerIDsError,
     InvalidVcfDataError,
@@ -21,7 +21,7 @@ from deepcgp._core.vcf import (
     reindex_vcf_data,
     validate_vcf_data,
 )
-from deepcgp.exceptions import DeepcgpError
+from deepgenocompress.exceptions import DeepgenocompressError
 
 
 @pytest.fixture(params=get_args(_MARKER_ID_FORMAT))
@@ -374,8 +374,8 @@ def invalid_vcf_data(request):
 
 
 class TestUnexpectedMarkerIdFormatError:
-    def test_error_is_DeepcgpError(self):
-        assert issubclass(UnexpectedMarkerIdFormatError, DeepcgpError)
+    def test_error_is_DeepgenocompressError(self):
+        assert issubclass(UnexpectedMarkerIdFormatError, DeepgenocompressError)
 
     def test_error_messages_and_extra(self):
         err = UnexpectedMarkerIdFormatError(
@@ -394,8 +394,8 @@ class TestUnexpectedMarkerIdFormatError:
 
 
 class TestInvalidVcfDataError:
-    def test_error_is_DeepcgpError(self):
-        assert issubclass(InvalidVcfDataError, DeepcgpError)
+    def test_error_is_DeepgenocompressError(self):
+        assert issubclass(InvalidVcfDataError, DeepgenocompressError)
 
     @pytest.mark.parametrize(
         "reason, extra, expected_msg",
@@ -1313,7 +1313,7 @@ class Test_read_vcf:
     @pytest.mark.parametrize("strict_gt", [True, False])
     def test_passes_strict_gt_to_VCF(self, strict_gt, mocker: MockerFixture):
         vcf_file = self.VCF_DIR / "basic.vcf"
-        mock_vcf_cls = mocker.patch("deepcgp._core.vcf.VCF", wraps=VCF)
+        mock_vcf_cls = mocker.patch("deepgenocompress._core.vcf.VCF", wraps=VCF)
 
         read_vcf(vcf_file, use_bases=True, strict_gt=strict_gt)
         mock_vcf_cls.assert_called_once_with(
@@ -1322,7 +1322,7 @@ class Test_read_vcf:
 
     def test_strict_gt_default_to_False(self, mocker: MockerFixture):
         vcf_file = self.VCF_DIR / "basic.vcf"
-        mock_vcf_cls = mocker.patch("deepcgp._core.vcf.VCF", wraps=VCF)
+        mock_vcf_cls = mocker.patch("deepgenocompress._core.vcf.VCF", wraps=VCF)
 
         read_vcf(vcf_file, use_bases=True)
         mock_vcf_cls.assert_called_once_with(

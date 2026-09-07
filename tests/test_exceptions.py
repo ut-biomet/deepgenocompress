@@ -1,10 +1,10 @@
 import pytest
 from helpers import get_all_subclasses
 
-import deepcgp.exceptions as exceptions_module
-from deepcgp._core.exceptions import DeepcgpError
+import deepgenocompress.exceptions as exceptions_module
+from deepgenocompress._core.exceptions import DeepgenocompressError
 
-custom_errors = get_all_subclasses(DeepcgpError)
+custom_errors = get_all_subclasses(DeepgenocompressError)
 
 
 @pytest.mark.parametrize(
@@ -25,5 +25,5 @@ def test_module_does_not_export_stale_names(exported_name):
     """Check that __all__ references something that actually exists."""
     assert hasattr(exceptions_module, exported_name), (
         f"`{exported_name}` is listed in __all__ but not actually importable "
-        f"from deepcgp.exceptions"
+        f"from deepgenocompress.exceptions"
     )

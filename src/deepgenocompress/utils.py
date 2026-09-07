@@ -1,4 +1,4 @@
-"""Public utility functions for deepcgp."""
+"""Public utility functions for deepgenocompress."""
 
 from typing import get_args
 

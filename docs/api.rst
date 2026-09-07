@@ -4,7 +4,7 @@ API Reference
 Module contents
 ---------------
 
-.. automodule:: deepcgp
+.. automodule:: deepgenocompress
    :members:
    :undoc-members:
    :imported-members:
@@ -13,26 +13,26 @@ Module contents
 Submodules
 ----------
 
-deepcgp.utils
-~~~~~~~~~~~~~~~~~~
+deepgenocompress.utils
+~~~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: deepcgp.utils
+.. automodule:: deepgenocompress.utils
    :members:
    :show-inheritance:
    :undoc-members:
 
-deepcgp.exceptions
-~~~~~~~~~~~~~~~~~~
+deepgenocompress.exceptions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: deepcgp.exceptions
+.. automodule:: deepgenocompress.exceptions
    :members:
    :show-inheritance:
    :undoc-members:
 
-deepcgp.warnings
-~~~~~~~~~~~~~~~~~~
+deepgenocompress.warnings
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: deepcgp.warnings
+.. automodule:: deepgenocompress.warnings
    :members:
    :show-inheritance:
    :undoc-members:

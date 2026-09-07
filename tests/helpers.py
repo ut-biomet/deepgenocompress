@@ -4,13 +4,15 @@ import importlib
 import inspect
 import pkgutil
 
-import deepcgp
+import deepgenocompress
 
 
 def get_all_subclasses(parent_class) -> dict[str, type]:
-    """Find every DeepcgpWarning subclass defined anywhere in the deepcgp package."""
+    """Find every DeepgenocompressWarning subclass defined anywhere in the package."""
     subclasses = {}
-    for module_info in pkgutil.walk_packages(deepcgp.__path__, prefix="deepcgp."):
+    for module_info in pkgutil.walk_packages(
+        deepgenocompress.__path__, prefix="deepgenocompress."
+    ):
         module = importlib.import_module(module_info.name)
         for name, obj in vars(module).items():
             if not inspect.isclass(obj):
