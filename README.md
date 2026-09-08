@@ -29,19 +29,55 @@ Online documentation is available at https://ut-biomet.github.io/DeepCGP/. It co
 page with a
 [usage example](https://ut-biomet.github.io/DeepCGP/quarto_pages/outputs/example.html).
 
-## Development environment
+## Installation
+
+The latest release of the package can be installed from github with:
+
+```sh
+uv add "deepgenocompress @ git+https://github.com/ut-biomet/DeepCGP.git" --tag v0.1.0
+```
+
+or
+
+```sh
+pip install "deepgenocompress @ git+https://github.com/ut-biomet/DeepCGP.git@v0.1.0"
+```
+
+To make sure you can actually use it this package, you need also need a
+[keras backend](https://keras.io/getting_started/#configuring-your-backend). This can be
+installed separately or with as optional dependency:
+
+```sh
+# use one of the below
+uv add "deepgenocompress[tensorflow] @ git+https://github.com/ut-biomet/DeepCGP.git" --tag v0.1.0
+uv add "deepgenocompress[torch] @ git+https://github.com/ut-biomet/DeepCGP.git" --tag v0.1.0
+uv add "deepgenocompress[jax] @ git+https://github.com/ut-biomet/DeepCGP.git" --tag v0.1.0
+```
+
+Similarly with `pip`:
+
+```sh
+pip install "deepgenocompress[tensorflow] @ git+https://github.com/ut-biomet/DeepCGP.git@v0.1.0"
+```
+
+> Note: If the backend is different than `tensorflow` you may need to explicitly specify it, cf.
+> https://keras.io/getting_started/#configuring-your-backend
+
+## Contributing
+
+### Development environment
 
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management. A Nix flake
 is also provided, for nix users go directly to the [Nix section](#nix-optional) below.
 
-### Prerequisites
+#### Prerequisites
 
 - Python 3.11 or higher
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)
 - (Recommended) Linux, MacOs, or
   [WSL](https://learn.microsoft.com/en-us/windows/wsl/install)
 
-### How to setup the environment
+#### How to setup the environment
 
 1. **Create a virtual environment** (if you don't already have one):
 
@@ -64,7 +100,7 @@ is also provided, for nix users go directly to the [Nix section](#nix-optional) 
    source .venv/bin/activate
    ```
 
-### Useful commands
+#### Useful commands
 
 The makes commands will probbly fail on a Windows environment (maybe try with Git Bash).
 
@@ -78,7 +114,7 @@ The makes commands will probbly fail on a Windows environment (maybe try with Gi
 | Add a new dependency                                                                                                                    | `uv add <package>`                      |
 | Add a dev dependency                                                                                                                    | `uv add --dev <package>`                |
 
-### Nix (optional)
+#### Nix (optional)
 
 If you use [Nix](https://nixos.org/) and [direnv](https://direnv.net/), the flake will
 automatically set up the Python environment and install dependencies for you when you `cd`

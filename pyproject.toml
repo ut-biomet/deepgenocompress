@@ -34,6 +34,26 @@ filename = "nix_pkgs/deepgenocompress.nix"
 search = 'version = "{current_version}"'
 replace = 'version = "{new_version}"'
 
+[[tool.bumpversion.files]]
+filename = "README.md"
+search = '--tag v{current_version}'
+replace = '--tag v{new_version}'
+
+[[tool.bumpversion.files]]
+filename = "README.md"
+search = '.git@v{current_version}'
+replace = '.git@v{new_version}'
+
+[[tool.bumpversion.files]]
+filename = "docs/installation.rst"
+search = '--tag v{current_version}'
+replace = '--tag v{new_version}'
+
+[[tool.bumpversion.files]]
+filename = "docs/installation.rst"
+search = '.git@v{current_version}'
+replace = '.git@v{new_version}'
+
 [dependency-groups]
 dev = [
   {include-group = "dev-no-exec"},
