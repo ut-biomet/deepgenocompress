@@ -32,6 +32,13 @@ jobs:
       - uses: ./.github/actions/nix-setup
       - run: nix develop --accept-flake-config -c -- make tests
 
+  nix_build_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/nix-setup
+      - run: nix build .\#deepgenocompress
+
   build-docs:
     needs: [tests]
     runs-on: ubuntu-latest

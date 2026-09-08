@@ -21,3 +21,6 @@ docs/quarto_pages/outputs/
 playground*
 scratch*
 sandbox*
+
+# nix build
+result
