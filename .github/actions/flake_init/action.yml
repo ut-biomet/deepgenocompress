@@ -1,0 +1,6 @@
+name: "Flake init"
+runs:
+  using: "composite"
+  steps:
+    - run: nix develop --accept-flake-config -c echo "flake initialised"
+      shell: bash
