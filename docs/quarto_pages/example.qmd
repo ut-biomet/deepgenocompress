@@ -37,6 +37,7 @@ from pprint import pprint
 
 import pandas as pd
 import deepgenocompress
+from deepgenocompress.utils import ExampleFiles
 ```
 
 
@@ -47,9 +48,8 @@ For this example we will use a **small** data set from a csv file storing SNP
 markers as strings: `A`, `C`, `T`, `G` with one sample per homozygous sample and
 one marker per column.
 
-<!-- # TODO: better path maybe add those example data in the package. -->
 ```{python}
-data = pd.read_csv(f"../../tests/fixtures/X.csv", index_col=0)
+data = pd.read_csv(ExampleFiles().csv, index_col=0)
 print(data)
 ```
 

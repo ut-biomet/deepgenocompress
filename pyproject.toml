@@ -110,6 +110,12 @@ log_cli_format = "%(asctime)s | %(levelname)-8s | %(name)s - %(message)s"
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+mypackage = ["data/*.csv", "data/*.vcf"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

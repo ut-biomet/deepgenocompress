@@ -1,7 +1,16 @@
+from pathlib import Path
+
+import pandas as pd
 import pytest
 
+from deepgenocompress import read_vcf
 from deepgenocompress.exceptions import UnexpectedMarkerIdFormatError
-from deepgenocompress.utils import MARKER_ID_FORMATS, build_marker_ids, encoding_size
+from deepgenocompress.utils import (
+    MARKER_ID_FORMATS,
+    ExampleFiles,
+    build_marker_ids,
+    encoding_size,
+)
 
 
 class TestEncodingSize:
@@ -40,3 +49,36 @@ def test_all_MARKER_ID_FORMATS_works_with_build_marker_ids(format):
         build_marker_ids(**marker_info, marker_id_format=format)
     except UnexpectedMarkerIdFormatError as e:
         pytest.fail(f"Unexpected UnexpectedMarkerIdFormatError raised: {e}")
+
+
+example_names = [name for name in dir(ExampleFiles()) if not name.startswith("_")]
+
+
+class TestExampleFiles:
+
+    @pytest.mark.parametrize("example_name", example_names)
+    def test_example_files_exists(self, example_name):
+        exemple_file: Path = getattr(ExampleFiles(), example_name)
+        assert exemple_file.exists(), f"{example_name}: {exemple_file} doesn't exists"
+        assert exemple_file.is_file(), f"{example_name}: {exemple_file} is not a file"
+        assert (
+            exemple_file.stat().st_size > 0
+        ), f"{example_name}: {exemple_file} is empty"
+
+    @pytest.mark.parametrize("example_name", example_names)
+    def test_example_files_can_be_loaded(self, example_name):
+        exemple_file: Path = getattr(ExampleFiles(), example_name)
+        if exemple_file.suffix == ".csv":
+            data = pd.read_csv(exemple_file)
+
+        if exemple_file.suffix == ".vcf":
+            data = read_vcf(exemple_file)
+
+        assert not data.empty
+
+    def test_print(self):
+        assert all(ex_name in str(ExampleFiles()) for ex_name in example_names)
+        exemple_files = [
+            str(getattr(ExampleFiles(), ex_name)) for ex_name in example_names
+        ]
+        assert all(f in str(ExampleFiles()) for f in exemple_files)
