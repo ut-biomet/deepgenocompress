@@ -200,6 +200,20 @@ It is also possible compress raw DataFrame directly with the `compress_dataframe
 method: `cm.compress_dataframe(geno_dataframe=data)`. The method will automatically
 encode the data before the compression using `cm.encoding_map`.
 
+Since `compressed_array` is a `numpy` array it can then be saved to a file using
+`numpy`'s dedicated features. Eg.:
+
+
+```{python}
+#| eval: false
+import numpy as np
+
+np.save("compressed_array.npy", compressed_array) # NumPy's native binary format
+np.savetxt("compressed_array.csv", compressed_array, delimiter=",")# csv
+```
+
+
+
 ### Summary
 
 
@@ -259,6 +273,19 @@ reads, encodes and compresses the file in a single call:
 ```{python}
 compressed_vcf = cm_vcf.compress_vcf_file(vcf_file=ExampleFiles().vcf)
 ```
+
+Since `compressed_array` is a `numpy` array it can then be saved to a file using
+`numpy`'s dedicated features. Eg.:
+
+
+```{python}
+#| eval: false
+import numpy as np
+
+np.save("compressed_array.npy", compressed_array) # NumPy's native binary format
+np.savetxt("compressed_array.csv", compressed_array, delimiter=",")# csv
+```
+
 
 The compressed data have `{python} compressed_vcf.shape[0]` lines,
 **`{python} compressed_vcf.shape[1]` columns**.
