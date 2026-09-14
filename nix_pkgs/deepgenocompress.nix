@@ -57,7 +57,7 @@ buildPythonPackage {
   ];
 
   meta = {
-    homepage = "https://github.com/ut-biomet/DeepCGP";
+    homepage = "https://github.com/ut-biomet/deepgenocompress";
     description = "An AI-Driven Tool for Compressing Genome-Wide Polymorphisms in Plant Breeding";
   };
 }

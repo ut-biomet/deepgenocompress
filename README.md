@@ -25,22 +25,22 @@ Availability of Maize Datasets: You can access the dataset from
 
 ## Documentation
 
-Online documentation is available at https://ut-biomet.github.io/DeepCGP/. It contains a
+Online documentation is available at https://ut-biomet.github.io/deepgenocompress/. It contains a
 page with a
-[usage example](https://ut-biomet.github.io/DeepCGP/quarto_pages/outputs/example.html).
+[usage example](https://ut-biomet.github.io/deepgenocompress/quarto_pages/outputs/example.html).
 
 ## Installation
 
 The latest release of the package can be installed from github with:
 
 ```sh
-uv add "deepgenocompress @ git+https://github.com/ut-biomet/DeepCGP.git" --tag v0.1.0
+uv add "deepgenocompress @ git+https://github.com/ut-biomet/deepgenocompress.git" --tag v0.1.0
 ```
 
 or
 
 ```sh
-pip install "deepgenocompress @ git+https://github.com/ut-biomet/DeepCGP.git@v0.1.0"
+pip install "deepgenocompress @ git+https://github.com/ut-biomet/deepgenocompress.git@v0.1.0"
 ```
 
 To make sure you can actually use it this package, you need also need a
@@ -49,15 +49,15 @@ installed separately or with as optional dependency:
 
 ```sh
 # use one of the below
-uv add "deepgenocompress[tensorflow] @ git+https://github.com/ut-biomet/DeepCGP.git" --tag v0.1.0
-uv add "deepgenocompress[torch] @ git+https://github.com/ut-biomet/DeepCGP.git" --tag v0.1.0
-uv add "deepgenocompress[jax] @ git+https://github.com/ut-biomet/DeepCGP.git" --tag v0.1.0
+uv add "deepgenocompress[tensorflow] @ git+https://github.com/ut-biomet/deepgenocompress.git" --tag v0.1.0
+uv add "deepgenocompress[torch] @ git+https://github.com/ut-biomet/deepgenocompress.git" --tag v0.1.0
+uv add "deepgenocompress[jax] @ git+https://github.com/ut-biomet/deepgenocompress.git" --tag v0.1.0
 ```
 
 Similarly with `pip`:
 
 ```sh
-pip install "deepgenocompress[tensorflow] @ git+https://github.com/ut-biomet/DeepCGP.git@v0.1.0"
+pip install "deepgenocompress[tensorflow] @ git+https://github.com/ut-biomet/deepgenocompress.git@v0.1.0"
 ```
 
 > Note: If the backend is different than `tensorflow` you may need to explicitly specify it, cf.

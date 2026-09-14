@@ -83,7 +83,7 @@ html_css_files = ["custom.css"]
 html_theme_options = {
     "show_toc_level": 3,
     "use_sidenotes": True,
-    "repository_url": "https://github.com/ut-biomet/DeepCGP",
+    "repository_url": "https://github.com/ut-biomet/deepgenocompress",
     "use_repository_button": True,
     "use_download_button": True,
     "use_source_button": True,
