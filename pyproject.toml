@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "An AI-Driven Tool for Compressing Genome-Wide Polymorphisms in Plant Breeding"
 readme = "README.md"
 authors = [
-    { name = "Tanzila Islam", email = "tanzilamohita@gmail.com" }
+    { name = "Tanzila Raihan", email = "tanzilamohita@gmail.com" },
+    { name = "Julien Diot", email = "juliendiot@ut-biomet.org" }
 ]
 requires-python = ">=3.12"
 dependencies = [
