@@ -6,7 +6,3 @@ runs:
     - uses: DeterminateSystems/magic-nix-cache-action@main
       with:
         use-flakehub: "disabled"
-
-    # build the flake environment (cleaner output for other jobs)
-    - run: nix develop --accept-flake-config -c echo "flake initialised"
-      shell: bash

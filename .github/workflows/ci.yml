@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   formatting:
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/nix-setup
@@ -20,7 +20,7 @@ jobs:
       - run: nix develop --accept-flake-config -c -- make format-check
 
   lint_type_checks:
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/nix-setup
@@ -28,7 +28,7 @@ jobs:
       - run: nix develop --accept-flake-config -c -- make python_checks
 
   tests:
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
@@ -37,7 +37,7 @@ jobs:
       - run: nix develop --accept-flake-config -c -- make tests
 
   nix_build_test:
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
@@ -45,8 +45,7 @@ jobs:
       - run: nix build .\#deepgenocompress
 
   build-docs:
-    # needs: [tests] # TODO: uncomment once test job is fixed
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/nix-setup
@@ -61,8 +60,8 @@ jobs:
 
   deploy-docs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    needs: [build-docs]
-    runs-on: ubuntu-slim
+    needs: [build-docs, tests]
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
