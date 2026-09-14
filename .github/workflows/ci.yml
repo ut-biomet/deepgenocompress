@@ -28,7 +28,7 @@ jobs:
       - run: nix develop --accept-flake-config -c -- make python_checks
 
   tests:
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
