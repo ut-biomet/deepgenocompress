@@ -1,5 +1,6 @@
 {
   buildPythonPackage,
+  setuptools,
 
   # python dependencies
   cyvcf2,
@@ -28,6 +29,7 @@ buildPythonPackage {
   src = ./..;
 
   build-system = [
+    setuptools
   ];
 
   dependencies = [
