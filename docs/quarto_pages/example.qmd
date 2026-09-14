@@ -216,3 +216,53 @@ size_reduction =  1 - compressed_array.shape[1]/encoded_data.shape[1]
   **`{python} compressed_array.shape[1]` columns**.
 
 Size reduction is `{python} f"{size_reduction:.1%}"`
+
+
+## Working with VCF files
+
+`deepgenocompress` can also work directly with VCF files. The
+`CompressionModel.from_vcf_file` classmethod reads a VCF file, builds an encoding
+map, and initialises a `CompressionModel` in one call — the VCF equivalent of
+`CompressionModel.from_dataframe` mentioned above.
+
+
+```{python}
+cm_vcf = deepgenocompress.CompressionModel.from_vcf_file(
+    vcf_file=ExampleFiles().vcf,
+    use_bases=False,
+    layer_sizes=[21, 7, 3],
+)
+```
+
+By default, genotypes are read as integers (`0`, `1`, `2`, `3` for homozygous
+reference, heterozygous, homozygous alternative and missing). Passing
+`use_bases=True` instead reads them as base-pair strings (e.g. `"C/A"`), in which
+case the encoding map is built accordingly. If not provided, `encoding_map` is
+built automatically from the VCF data and stored on the instance, accessible via
+`cm_vcf.encoding_map`.
+
+```{python}
+pprint(cm_vcf.encoding_map)
+```
+
+### Fit the autoencoders and compress data
+
+Just like before, the model is initialised but not yet fitted:
+
+```{python}
+cm_vcf.fit()
+```
+
+The fitted model can compress VCF data directly with `compress_vcf_file`, which
+reads, encodes and compresses the file in a single call:
+
+```{python}
+compressed_vcf = cm_vcf.compress_vcf_file(vcf_file=ExampleFiles().vcf)
+```
+
+The compressed data have `{python} compressed_vcf.shape[0]` lines,
+**`{python} compressed_vcf.shape[1]` columns**.
+
+Columns are matched against `cm_vcf.training_markers_index`, so a VCF file with a
+different (but compatible) set of markers can be compressed against the same
+fitted model.
