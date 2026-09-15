@@ -1124,8 +1124,9 @@ class Test_read_vcf:
     @pytest.mark.parametrize(
         "use_bases", [True, False], ids=["use_bases = True", "use_bases = False"]
     )
-    def test_returns_valid_vcf_data(self, use_bases, marker_id_format):
-        vcf_file = self.VCF_DIR / "basic.vcf"
+    @pytest.mark.parametrize("vcf_filename", ["basic.vcf", "basic.vcf.gz"])
+    def test_returns_valid_vcf_data(self, use_bases, marker_id_format, vcf_filename):
+        vcf_file = self.VCF_DIR / vcf_filename
         vcf_data = read_vcf(
             vcf_file, use_bases=use_bases, marker_id_format=marker_id_format
         )
@@ -1141,11 +1142,14 @@ class Test_read_vcf:
     @pytest.mark.parametrize(
         "use_bases", [True, False], ids=["use_bases = True", "use_bases = False"]
     )
-    def test_returns_expected_df_structure(self, use_bases, marker_id_format):
+    @pytest.mark.parametrize("vcf_filename", ["basic.vcf", "basic.vcf.gz"])
+    def test_returns_expected_df_structure(
+        self, use_bases, marker_id_format, vcf_filename
+    ):
         # Verifies the basic contract: given a small, known VCF file, the returned
         # object is a pd.DataFrame whose index equals the VCF sample names and whose
         # columns equal the expected marker IDs
-        vcf_file = self.VCF_DIR / "basic.vcf"
+        vcf_file = self.VCF_DIR / vcf_filename
         vcf_data = read_vcf(
             vcf_file, use_bases=use_bases, marker_id_format=marker_id_format
         )
@@ -1160,11 +1164,14 @@ class Test_read_vcf:
     @pytest.mark.parametrize(
         "use_bases", [True, False], ids=["use_bases = True", "use_bases = False"]
     )
-    def test_sets_attrs_use_bases_and_markers_info(self, use_bases, marker_id_format):
+    @pytest.mark.parametrize("vcf_filename", ["basic.vcf", "basic.vcf.gz"])
+    def test_sets_attrs_use_bases_and_markers_info(
+        self, use_bases, marker_id_format, vcf_filename
+    ):
         # Confirms vcf_data.attrs contains "use_bases" (matching the input flag) and
         # "markers_info" (a dict keyed by marker ID, with correct
         # chrom, pos, id, ref, alt for each variant).
-        vcf_file = self.VCF_DIR / "basic.vcf"
+        vcf_file = self.VCF_DIR / vcf_filename
         vcf_data = read_vcf(
             vcf_file, use_bases=use_bases, marker_id_format=marker_id_format
         )
