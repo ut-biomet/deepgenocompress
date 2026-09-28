@@ -55,6 +55,20 @@ filename = "docs/installation.rst"
 search = '.git@v{current_version}'
 replace = '.git@v{new_version}'
 
+
+[[tool.bumpversion.files]]
+filename = "CHANGELOG.md"
+search = "## [Unreleased]"
+replace = """## [Unreleased]
+
+## [{new_version}] - {now:%Y-%m-%d}"""
+
+[[tool.bumpversion.files]]
+filename = "CHANGELOG.md"
+search = "[Unreleased]: https://github.com/ut-biomet/deepgenocompress/compare/v{current_version}...HEAD"
+replace = """[Unreleased]: https://github.com/ut-biomet/deepgenocompress/compare/v{new_version}...HEAD
+[{new_version}]: "https://github.com/ut-biomet/deepgenocompress/compare/v{current_version}...v{new_version}"""
+
 [dependency-groups]
 dev = [
   {include-group = "dev-no-exec"},
