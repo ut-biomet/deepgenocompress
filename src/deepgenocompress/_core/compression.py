@@ -30,7 +30,12 @@ import numpy as np
 import pandas as pd
 
 from .utils import encoding_size
-from .vcf import _MARKER_ID_FORMAT, build_vcf_encoding_map, read_vcf
+from .vcf import (
+    _MARKER_ID_FORMAT,
+    build_vcf_encoding_map,
+    infer_marker_id_format,
+    read_vcf,
+)
 
 if TYPE_CHECKING:
     from keras import Model
@@ -1766,7 +1771,7 @@ class CompressionModel:
         self,
         vcf_file: str | Path,
         use_bases: bool = False,
-        marker_id_format: _MARKER_ID_FORMAT = "ref_alt",
+        marker_id_format: _MARKER_ID_FORMAT | None = None,
         strict_gt: bool = False,
         batch_size: int | None = None,
         encoding_map: Mapping[Any, list[float]] | None = None,
@@ -1786,8 +1791,11 @@ class CompressionModel:
             (``True``) or as integers (``False``, the default). See:
             :func:`read_vcf`
         marker_id_format :
-            Format used to build each marker's column id. See
-            :func:`utils.build_marker_ids` for the available formats.
+            (Optional) Format used to build each marker's column id. See
+            :func:`utils.build_marker_ids` for the available formats. If ``None``,
+            the format will be infred from the first
+            :attr:`CompressionModel.training_markers_index` if they are available
+            else it will default to ``"ref_alt"``.
         strict_gt :
             :class:`cyvcf2.cyvcf2.VCF`'s argument to controls how partially missing
             genotypes are handled:
@@ -1818,15 +1826,24 @@ class CompressionModel:
             If the model has not been fitted yet (i.e.
             :attr:`CompressionModel.is_fitted` is ``False``).
         IncompatibleDataError
-            - If the set of ``geno_dataframe``'s columns index is different from
-              the one from the training data (i.e.
+            - If the set of vcf data's marker id (build following ``marker_id_format``)
+            is different from the one from the training data (i.e.
               :attr:`CompressionModel.training_markers_index`)
 
-            If ``geno_dataframe`` has a different number of markers than
+            If the resulting vcf data has a different number of markers than
             the training data.
         InvalidEncodingMapError
             If the ``encoding_map`` is invalid (see :func:`encode_snp_array`)
         """
+        if marker_id_format is None:
+            if self.training_markers_index is not None:
+                marker_id_format = infer_marker_id_format(
+                    str(self.training_markers_index[0])
+                )
+            else:
+                # fallback to "ref_alt" (default for read_vcf's marker_id_format)
+                marker_id_format = "ref_alt"
+
         vcf_data = read_vcf(
             vcf_file=vcf_file,
             use_bases=use_bases,

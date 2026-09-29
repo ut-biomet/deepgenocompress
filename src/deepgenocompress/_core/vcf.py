@@ -830,6 +830,63 @@ def build_marker_ids(
             raise UnexpectedMarkerIdFormatError(marker_id_format)
 
 
+def infer_marker_id_format(marker_id: str) -> _MARKER_ID_FORMAT:
+    """Infer the ``marker_id_format`` used to build a marker id.
+
+    The marker id string is analysed with regex, to catch the the formats produced by
+    :func:`build_marker_ids`:
+
+    - ``"pos"``: ``"{chrom}@{pos}"``
+    - ``"ref_alt"``: ``"{chrom}@{pos}_{ref}_{alt1-alt2-...}"``
+    - ``"alleles"``: ``"{chrom}@{pos}_{allele1-allele2-...}"``
+    - ``"id"``: anything else.
+
+    Parameters
+    ----------
+    marker_id :
+        Marker id string, as returned by :func:`build_marker_ids`.
+
+    Returns
+    -------
+        The inferred ``marker_id_format``.
+
+    Notes
+    -----
+    Any string is a valid ``"id"`` marker id, so ``"id"`` is the fallback when
+    the string does not have the structure of another format. Consequently, an
+    ``id`` that happens to look like a built id (eg. ``"chr1@1234"``) is
+    reported as the corresponding format. That ambiguity cannot be resolved
+    from the string alone.
+
+    See Also
+    --------
+    :func:`build_marker_ids`: The function whose output is analysed here.
+    """
+    chrom_pos = r".+@\d+"  # "{chrom}@{pos}";
+    ref = r"[ACGTN]+"  # VCF spec: "Each base must be one of A,C,G,T,N"
+    allele_base = r"(?:[ACGTN\*]+)"  # Each base being one of A,C,G,T,N,*
+    allele_id = r"(?:<[^<>]+>)"  # angle-bracketed ID String ("<ID>")
+    allele = rf"(?:{allele_base}|{allele_id})"
+    alleles = rf"{allele}?(?:-{allele})*"
+
+    # "pos": "{chrom}@{pos}"
+    if re.fullmatch(rf"^{chrom_pos}$", marker_id):
+        return "pos"
+
+    # "ref_alt": "{chrom}@{pos}_{ref}_{alt1-alt2-...}"
+    if re.fullmatch(rf"^{chrom_pos}_{ref}_{alleles}$", marker_id, re.IGNORECASE):
+        return "ref_alt"
+
+    # "alleles": "{chrom}@{pos}_{allele1-allele2-...}"
+    if re.fullmatch(rf"^{chrom_pos}_{alleles}$", marker_id, re.IGNORECASE):
+        return "alleles"
+        # `build_marker_ids` also sort the alleles but this could be difficult to
+        # capture and test correctly
+
+    # "id": no particular structure detected, anything else
+    return "id"
+
+
 def build_vcf_encoding_map(vcf_data: pd.DataFrame) -> dict[Any, list[float]]:
     """Build an encoding map for the genotype data comming from a VCF file.
 

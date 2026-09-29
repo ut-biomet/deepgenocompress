@@ -1,4 +1,5 @@
 import copy
+import inspect
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,6 +28,7 @@ from deepgenocompress._core.data_processing import (
     build_one_hot_encoding_map,
     encode_snp_array,
 )
+from deepgenocompress._core.vcf import read_vcf
 from deepgenocompress.exceptions import (
     CompressionModelConfigurationError,
     DeepgenocompressError,
@@ -1154,7 +1156,7 @@ class TestCompressionModel_initialisation_from_vcf_file:
     def test_pass_arguments_to_read_vcf(self, mocker: MockerFixture):
         custom_vcf_file = "custom_vcf_file"
         custom_use_bases = "custom_use_bases"
-        custom_arker_id_format = "custom_arker_id_format"
+        custom_marker_id_format = "custom_marker_id_format"
         custom_strict_gt = "custom_strict_gt"
 
         fake_vcf_data = "fake_vcf_data"
@@ -1169,14 +1171,14 @@ class TestCompressionModel_initialisation_from_vcf_file:
         CompressionModel.from_vcf_file(
             vcf_file=custom_vcf_file,
             use_bases=custom_use_bases,  # pyright: ignore [reportArgumentType]
-            marker_id_format=custom_arker_id_format,  # pyright: ignore [reportArgumentType]
+            marker_id_format=custom_marker_id_format,  # pyright: ignore [reportArgumentType]
             strict_gt=custom_strict_gt,  # pyright: ignore [reportArgumentType]
         )
 
         mock_read_vcf.assert_called_once_with(
             vcf_file=custom_vcf_file,
             use_bases=custom_use_bases,
-            marker_id_format=custom_arker_id_format,
+            marker_id_format=custom_marker_id_format,
             strict_gt=custom_strict_gt,
         )
         mock_from_df.assert_called_once()
@@ -1994,7 +1996,7 @@ class TestCompressionModel_compress_vcf_file:
     def test_pass_arguments_to_read_vcf(self, mocker: MockerFixture):
         custom_vcf_file = "custom_vcf_file"
         custom_use_bases = "custom_use_bases"
-        custom_arker_id_format = "custom_arker_id_format"
+        custom_marker_id_format = "custom_marker_id_format"
         custom_strict_gt = "custom_strict_gt"
 
         fake_vcf_data = "fake_vcf_data"
@@ -2011,14 +2013,14 @@ class TestCompressionModel_compress_vcf_file:
         cm.compress_vcf_file(
             vcf_file=custom_vcf_file,
             use_bases=custom_use_bases,  # pyright: ignore [reportArgumentType]
-            marker_id_format=custom_arker_id_format,  # pyright: ignore [reportArgumentType]
+            marker_id_format=custom_marker_id_format,  # pyright: ignore [reportArgumentType]
             strict_gt=custom_strict_gt,  # pyright: ignore [reportArgumentType]
         )
 
         mock_read_vcf.assert_called_once_with(
             vcf_file=custom_vcf_file,
             use_bases=custom_use_bases,
-            marker_id_format=custom_arker_id_format,
+            marker_id_format=custom_marker_id_format,
             strict_gt=custom_strict_gt,
         )
         mock_compress_df.assert_called_once()
@@ -2084,6 +2086,49 @@ class TestCompressionModel_compress_vcf_file:
         mock_compress_df.assert_called_once()
         assert mock_compress_df.call_args.kwargs["batch_size"] == custom_batch_size
         assert result == fake_compressed_data
+
+    def test_infer_marker_id_format(self, mocker: MockerFixture):
+        fake_infered_marker_id_format = "infered_marker_id_format"
+
+        mock_read_vcf = mocker.patch("deepgenocompress._core.compression.read_vcf")
+        mocker.patch(
+            "deepgenocompress._core.compression.infer_marker_id_format",
+            return_value=fake_infered_marker_id_format,
+        )
+        mocker.patch("deepgenocompress._core.compression.build_vcf_encoding_map")
+        mocker.patch.object(CompressionModel, "compress_dataframe")
+
+        cm = CompressionModel()
+        cm.training_markers_index = ["marker_01"]
+
+        cm.compress_vcf_file(vcf_file="file.vcf")
+
+        mock_read_vcf.assert_called_once()
+        assert (
+            mock_read_vcf.call_args.kwargs["marker_id_format"]
+            == fake_infered_marker_id_format
+        )
+
+    def test_marker_id_format_default_to_read_vcf_default_when_training_index_is_none(
+        self, mocker: MockerFixture
+    ):
+        mock_infer_marker_id_format = mocker.patch(
+            "deepgenocompress._core.compression.infer_marker_id_format",
+        )
+        mock_read_vcf = mocker.patch("deepgenocompress._core.compression.read_vcf")
+        mocker.patch("deepgenocompress._core.compression.build_vcf_encoding_map")
+        mocker.patch.object(CompressionModel, "compress_dataframe")
+
+        cm = CompressionModel()
+        cm.training_markers_index = None
+
+        cm.compress_vcf_file(vcf_file="file.vcf")
+
+        mock_infer_marker_id_format.assert_not_called()
+        assert (
+            mock_read_vcf.call_args.kwargs["marker_id_format"]
+            == inspect.signature(read_vcf).parameters["marker_id_format"].default
+        )
 
 
 class Test_possible_first_layer_sizes:
