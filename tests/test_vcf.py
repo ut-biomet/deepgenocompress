@@ -1,3 +1,4 @@
+import itertools
 import re
 from pathlib import Path
 from typing import get_args
@@ -17,6 +18,7 @@ from deepgenocompress._core.vcf import (
     UnexpectedMarkerIdFormatError,
     build_marker_ids,
     build_vcf_encoding_map,
+    infer_marker_id_format,
     read_vcf,
     reindex_vcf_data,
     validate_vcf_data,
@@ -790,6 +792,87 @@ class Test_build_marker_ids:
                 alt=["T"],
                 marker_id_format="unexpected fromat",  # pyright: ignore [reportArgumentType]
             )
+
+
+def _all_combinations(field_values):
+    """Cartesian product of all field values, as a list of dicts."""
+    names = list(field_values)
+    return [
+        dict(zip(names, combo, strict=True))
+        for combo in itertools.product(*field_values.values())
+    ]
+
+
+def _one_variation_at_a_time(field_values):
+    """Baseline (first value of each field) + each other value varied alone."""
+    baseline = {name: values[0] for name, values in field_values.items()}
+    variations = [
+        {**baseline, name: value}
+        for name, values in field_values.items()
+        for value in values[1:]
+    ]
+    return [baseline, *variations]
+
+
+def _unique_marker_id_cases(marker_infos, formats=None):
+    """Distinct (marker_id, format) pairs over the given formats and marker infos."""
+    if formats is None:
+        formats = get_args(_MARKER_ID_FORMAT)
+    cases = (
+        (build_marker_ids(marker_id_format=fmt, **info), fmt)
+        for fmt in formats
+        for info in marker_infos
+    )
+    return list(dict.fromkeys(cases))  # deduplicate
+
+
+_MARKER_INFO_FIELD_VALUES = {
+    "chrom": ["chr1", "CHR_9", "chrUn_gl000220", "chr@123"],
+    "pos": [1, 1_234_567_890],
+    "id": ["SNP_01", None, "rs12@abc", "a-b.c:d", "001", "."],
+    "ref": ["A", "tca"],
+    "alt": [
+        ["T"],
+        [],
+        ["A", "T", "c"],
+        ["*", "TAC"],
+        ["<DEL>"],
+        ["<DUP_TANDEM>"],
+    ],
+}
+
+_marker_id_small_cases = _unique_marker_id_cases(
+    _one_variation_at_a_time(_MARKER_INFO_FIELD_VALUES)
+)
+
+
+class Test_infer_marker_id_format:
+    @pytest.mark.parametrize(
+        "marker_id, expected_format",
+        [
+            pytest.param(m_id, fmt, id=f"{fmt} - {m_id}")
+            for m_id, fmt in _marker_id_small_cases
+        ],
+    )
+    def test_automatically_generated_ids_are_correctly_infered2(
+        self, marker_id, expected_format
+    ):
+        assert infer_marker_id_format(marker_id) == expected_format
+
+    def test_exhaustive_on_all_combinations(self, marker_id_format):
+        cases = _unique_marker_id_cases(
+            _all_combinations(_MARKER_INFO_FIELD_VALUES),
+            formats=[marker_id_format],
+        )
+
+        failures = [
+            {"marker_id": m_id, "expected": fmt, "got": inferred}
+            for m_id, fmt in cases
+            if (inferred := infer_marker_id_format(m_id)) != fmt
+        ]
+        assert (
+            not failures
+        ), f"{len(failures)}/{len(cases)} ids failed; first: {failures[0]}"
 
 
 class Test_reindex_vcf_data:

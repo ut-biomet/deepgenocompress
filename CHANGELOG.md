@@ -10,6 +10,13 @@ project adheres to [semantic versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - `CHANGELOG.md`: All notable changes to this project will be documented in this file.
+- `utils.infer_marker_id_format` to infer the `marker_id_format` of a marker id string.
+
+### Changed
+
+- `CompressionModel.compress_vcf_file`: `marker_id_format` now auto-detects
+  `marker_id_format` from `training_markers_index` when available, falling back to
+  `"ref_alt"` if `training_markers_index` are not available.
 
 ## [0.1.0] - 2026-09-14
 
