@@ -2,8 +2,8 @@
 
 All notable changes to this project will be documented in this file.
 
-the format is based on [keep a changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [semantic versioning](https://semver.org/spec/v2.0.0.html).
+the format is based on [keep a changelog](https://keepachangelog.com/en/1.1.0/), and this
+project adheres to [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
@@ -24,8 +24,8 @@ as an installable Python package (requires Python >= 3.11).
   compression.
   - Can be initialised from a NumPy array, a `pandas.DataFrame` (`from_dataframe`) or a
     VCF file (`from_vcf_file`), and can compress `DataFrame` inputs directly.
-  - Supports layer sizes that are not compatible with the number of markers by padding
-    the data (a warning is raised in that case).
+  - Supports layer sizes that are not compatible with the number of markers by padding the
+    data (a warning is raised in that case).
   - Exposes `training_markers_index` and validates a custom `encoding_map` against the
     training data and layer sizes.
 - `AutoencoderModels`: container class holding the autoencoder and encoder models. Both
@@ -46,18 +46,14 @@ as an installable Python package (requires Python >= 3.11).
   - Example data files shipped with the package.
 - Custom exceptions (`deepgenocompress.exceptions`), such as `InvalidEncodingMapError`,
   `LayerSizesConfigurationError`, `ModelStateError`, `IncompatibleDataError` and
-  `CompressionModelConfigurationError`. Long collections are truncated in error
-  messages.
+  `CompressionModelConfigurationError`. Long collections are truncated in error messages.
 - Custom warnings (`deepgenocompress.warnings`), such as `UnmappedValuesWarning` and
   `LessThanOneAlleleChunksWarning`.
-- Optional Keras backend extras: `tensorflow`, `torch` and `jax`
-  (e.g. `pip install "deepgenocompress[torch] @ git+..."`).
+- Optional Keras backend extras: `tensorflow`, `torch` and `jax` (e.g.
+  `pip install "deepgenocompress[torch] @ git+..."`).
 - Online documentation (Sphinx and Quarto) deployed on GitHub Pages, including a usage
   example covering DataFrames, VCF files and saving the compressed array.
 - Nix package and flake for Nix users.
-
-
-
 
 [Unreleased]: https://github.com/ut-biomet/deepgenocompress/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/ut-biomet/deepgenocompress/releases/tag/v0.1.0
