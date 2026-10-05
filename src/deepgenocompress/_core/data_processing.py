@@ -12,8 +12,10 @@ encode_snp_array(geno_array, missing_values={"N"}, encoding_map=None)
     Encode a genotype array into a numerical matrix.
 """
 
+from __future__ import annotations
+
 from collections.abc import Collection, Container, Mapping
-from enum import StrEnum, auto
+from enum import auto
 from numbers import Real
 from typing import Any, ClassVar, TypedDict
 
@@ -21,7 +23,11 @@ import numpy as np
 import pandas as pd
 from numpy.typing import ArrayLike, NDArray
 
-from deepgenocompress._core.exceptions import DeepgenocompressError, _type_fullname
+from deepgenocompress._core.exceptions import (
+    _ReasonCodeEnum,
+    _ReasonedError,
+    _type_fullname,
+)
 from deepgenocompress._core.warnings import DeepgenocompressWarning, _deepgc_warn
 
 from .utils import encoding_size
@@ -136,20 +142,17 @@ def build_one_hot_encoding_map(
     return enc_map
 
 
-class InvalidEncodingMapError(DeepgenocompressError):
+class InvalidEncodingMapError(_ReasonedError):
     """Raised when an encoding map is not valid.
 
     Instances are constructed with a :class:`ReasonCode` identifying which validation
     failed, plus an ``extra`` mapping of contextual values
     """
 
-    class ReasonCode(StrEnum):
-        """Possible invalid reasons."""
+    reason: ReasonCode
+    extra: ExtraKeys | dict[str, Any]
 
-        def __repr__(self) -> str:
-            """Return the string representation."""
-            return self.name
-
+    class ReasonCode(_ReasonCodeEnum):
         INVALID_TYPE = auto()
         """Encoding map is not a :class:`~collections.abc.Mapping`."""
         EMPTY_ENCODING_MAP = auto()
@@ -163,7 +166,7 @@ class InvalidEncodingMapError(DeepgenocompressError):
         """An allele listed as a missing value is not encoded as a vector of all
         zeros."""
 
-    _MESSAGES: ClassVar[dict["InvalidEncodingMapError.ReasonCode", str]] = {
+    _MESSAGES: ClassVar[Mapping[ReasonCode, str]] = {
         ReasonCode.INVALID_TYPE: (
             f"`encoding_map` must be a {_type_fullname(Mapping)} "
             "got a {provided_type_str}."
@@ -184,8 +187,10 @@ class InvalidEncodingMapError(DeepgenocompressError):
         ),
     }
 
-    class _Extra(TypedDict, total=False):
-        reason: "InvalidEncodingMapError.ReasonCode"
+    class ExtraKeys(_ReasonedError.ExtraKeys, TypedDict, total=False):
+
+        reason: InvalidEncodingMapError.ReasonCode
+        """Which rule was violated."""
         provided_type: type
         provided_encoding: Any
         offending_allele: Any
@@ -193,49 +198,20 @@ class InvalidEncodingMapError(DeepgenocompressError):
         reference_allele: Any
         offending_missing_value: Any
 
-    extra: "_Extra | dict[str, Any]"
-    """Extra information related to the error.
+    @classmethod
+    def _derive_format_args(
+        cls, reason: Any, extra: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        r = cls.ReasonCode
+        if reason is r.INVALID_TYPE:
+            return {"provided_type_str": _type_fullname(extra["provided_type"])}
+        if reason is r.LENGTH_MISMATCH:
+            return {
+                "provided_encoding_length": len(extra["provided_encoding"]),
+                "reference_encoding_length": len(extra["reference_encoding"]),
+            }
 
-    :class:`dict` with possible keys depending on the :attr:`reason`:
-        - ``reason``: :class:`ReasonCode`
-        - ``provided_type``: :class:`type`
-        - ``provided_encoding``: :class:`Any`
-        - ``offending_allele``: :class:`Any`
-        - ``reference_encoding``: :class:`Any`
-        - ``reference_allele``: :class:`Any`
-        - ``offending_missing_value``: :class:`Any`
-    """
-
-    reason: ReasonCode
-    """Which validation rule the encoding map failed."""
-
-    def __init__(
-        self,
-        reason: "InvalidEncodingMapError.ReasonCode",
-        extra: "InvalidEncodingMapError. _Extra | None" = None,
-    ):
-        self.reason = reason
-        extra = extra or {}
-        str_extra = {
-            "provided_type_str": (
-                _type_fullname(extra["provided_type"])
-                if "provided_type" in extra
-                else None
-            ),
-            "provided_encoding_length": (
-                len(extra["provided_encoding"])
-                if "provided_encoding" in extra
-                else None
-            ),
-            "reference_encoding_length": (
-                len(extra["reference_encoding"])
-                if "reference_encoding" in extra
-                else None
-            ),
-        }
-        str_extra = {k: v for k, v in str_extra.items() if v is not None}
-        message = self._MESSAGES[reason].format(**extra, **str_extra)
-        super().__init__(message=message, extra={"reason": reason, **extra})
+        return {}
 
 
 def _validate_encoding_map(
