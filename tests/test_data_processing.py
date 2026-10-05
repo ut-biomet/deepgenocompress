@@ -1,8 +1,10 @@
 from itertools import cycle
+from typing import ClassVar
 
 import numpy as np
 import pandas as pd
 import pytest
+from helpers import ErrorTestBase
 from pytest_mock import MockerFixture
 
 from deepgenocompress._core.data_processing import (
@@ -12,7 +14,7 @@ from deepgenocompress._core.data_processing import (
     build_one_hot_encoding_map,
     encode_snp_array,
 )
-from deepgenocompress.exceptions import DeepgenocompressError, InvalidEncodingMapError
+from deepgenocompress.exceptions import InvalidEncodingMapError
 from deepgenocompress.warnings import DeepgenocompressWarning
 
 
@@ -81,83 +83,50 @@ class TestAllZerosEncodedWarning:
         assert expected_msg in str(warn)
 
 
-class TestInvalidEncodingMapError:
-    def test_error_is_DeepgenocompressError(self):
-        assert issubclass(InvalidEncodingMapError, DeepgenocompressError)
-
-    def test_all_reason_codes_have_a_message(self):
-        assert set(InvalidEncodingMapError._MESSAGES) == set(
-            InvalidEncodingMapError.ReasonCode
-        )
-
-    @pytest.mark.parametrize(
-        "reason, extra, expected_msg",
-        [
-            (
-                InvalidEncodingMapError.ReasonCode.INVALID_TYPE,
-                {"provided_type": list},
-                "`encoding_map` must be a collections.abc.Mapping got a list.",
+class TestInvalidEncodingMapError(ErrorTestBase):
+    error_class = InvalidEncodingMapError
+    test_cases: ClassVar = {
+        InvalidEncodingMapError.ReasonCode.INVALID_TYPE: {
+            "extra": {"provided_type": list},
+            "expected_msg": (
+                "`encoding_map` must be a collections.abc.Mapping got a list."
             ),
-            (
-                InvalidEncodingMapError.ReasonCode.EMPTY_ENCODING_MAP,
-                None,
-                "Encoding map is empty.",
+        },
+        InvalidEncodingMapError.ReasonCode.EMPTY_ENCODING_MAP: {
+            "expected_msg": "Encoding map is empty."
+        },
+        InvalidEncodingMapError.ReasonCode.INVALID_ENCODING: {
+            "extra": {
+                "offending_allele": "A",
+                "provided_encoding": "0001",
+            },
+            "expected_msg": (
+                "Encoding for allele 'A' must be a list of numerical values, got "
+                "'0001'."
             ),
-            (
-                InvalidEncodingMapError.ReasonCode.INVALID_ENCODING,
-                {
-                    "offending_allele": "A",
-                    "provided_encoding": "0001",
-                },
-                (
-                    "Encoding for allele 'A' must be a list of numerical values, got "
-                    "'0001'."
-                ),
+        },
+        InvalidEncodingMapError.ReasonCode.LENGTH_MISMATCH: {
+            "extra": {
+                "reference_allele": "A",
+                "offending_allele": "T",
+                "provided_encoding": [0, 1],
+                "reference_encoding": [1, 0, 0, 0],
+            },
+            "expected_msg": (
+                "All encodings must have the same length, got a length of "
+                "2 for allele 'T' but 4 for allele 'A'"
             ),
-            (
-                InvalidEncodingMapError.ReasonCode.LENGTH_MISMATCH,
-                {
-                    "reference_allele": "A",
-                    "offending_allele": "T",
-                    "provided_encoding": [0, 1],
-                    "reference_encoding": [1, 0, 0, 0],
-                },
-                (
-                    "All encodings must have the same length, got a length of "
-                    "2 for allele 'T' but 4 for allele 'A'"
-                ),
+        },
+        InvalidEncodingMapError.ReasonCode.MISSING_VALUE_NOT_ZERO: {
+            "extra": {
+                "offending_missing_value": "N",
+                "provided_encoding": [9, 9],
+            },
+            "expected_msg": (
+                "Missing value 'N' must be encoded with a vector of 0, got '[9, 9]'."
             ),
-            (
-                InvalidEncodingMapError.ReasonCode.MISSING_VALUE_NOT_ZERO,
-                {
-                    "offending_missing_value": "N",
-                    "provided_encoding": [9, 9],
-                },
-                "Missing value 'N' must be encoded with a vector of 0, got '[9, 9]'.",
-            ),
-        ],
-        ids=[
-            "INVALID_TYPE",
-            "EMPTY_ENCODING_MAP",
-            "INVALID_ENCODING",
-            "LENGTH_MISMATCH",
-            "MISSING_VALUE_NOT_ZERO",
-        ],
-    )
-    def test_error_messages_and_extra(self, reason, extra, expected_msg):
-        err = InvalidEncodingMapError(
-            reason=reason,
-            extra=extra,
-        )
-        assert "reason" in err.extra
-        assert err.extra["reason"] is reason
-
-        if extra is not None:
-            for k, v in extra.items():
-                assert k in err.extra
-                assert v == err.extra[k]
-
-        assert expected_msg in str(err)
+        },
+    }
 
 
 class TestValidateEncodingMap:

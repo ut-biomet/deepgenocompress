@@ -3,11 +3,13 @@ import inspect
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 from unittest.mock import call
 
 import numpy as np
 import pandas as pd
 import pytest
+from helpers import ErrorTestBase
 from keras import Model
 from keras.callbacks import EarlyStopping, History
 from pytest_mock import MockerFixture
@@ -31,7 +33,6 @@ from deepgenocompress._core.data_processing import (
 from deepgenocompress._core.vcf import read_vcf
 from deepgenocompress.exceptions import (
     CompressionModelConfigurationError,
-    DeepgenocompressError,
     IncompatibleDataError,
     InvalidEncodingMapError,
     LayerSizesConfigurationError,
@@ -147,211 +148,92 @@ class TestLessThanOneAlleleChunks:
         assert warn.extra["encoding_size"] == 50
 
 
-class TestLayerSizesConfigurationError:
-    def test_error_is_DeepgenocompressError(self):
-        assert issubclass(LayerSizesConfigurationError, DeepgenocompressError)
-
-    def test_all_reason_codes_have_a_message(self):
-        assert set(LayerSizesConfigurationError._MESSAGES) == set(
-            LayerSizesConfigurationError.ReasonCode
-        )
-
-    @pytest.mark.parametrize(
-        "reason, extra, expected_msg",
-        [
-            (
-                LayerSizesConfigurationError.ReasonCode.INVALID_TYPE,
-                {"provided_type": dict},
-                "`layer_sizes` must be a list or tuple, got a dict.",
+class TestLayerSizesConfigurationError(ErrorTestBase):
+    error_class = LayerSizesConfigurationError
+    test_cases: ClassVar = {
+        LayerSizesConfigurationError.ReasonCode.INVALID_TYPE: {
+            "extra": {"provided_type": dict},
+            "expected_msg": "`layer_sizes` must be a list or tuple, got a dict.",
+        },
+        LayerSizesConfigurationError.ReasonCode.TOO_FEW_LAYERS: {
+            "extra": {"provided_layer_sizes": [42]},
+            "expected_msg": "`layer_sizes` length must be at least 2, got 1.",
+        },
+        LayerSizesConfigurationError.ReasonCode.INVALID_LAYER_TYPE: {
+            "extra": {"provided_element_type": float, "offending_index": 2},
+            "expected_msg": (
+                "`layer_sizes` must be a list or tuple of int, got "
+                "`float` at index 2."
             ),
-            (
-                LayerSizesConfigurationError.ReasonCode.TOO_FEW_LAYERS,
-                {"provided_layer_sizes": [42]},
-                "`layer_sizes` length must be at least 2, got 1.",
+        },
+    }
+
+
+class TestModelStateError(ErrorTestBase):
+    error_class = ModelStateError
+    test_cases: ClassVar = {
+        ModelStateError.ReasonCode.NO_TRAINING_DATA: {
+            "expected_msg": "No training data available.",
+        },
+        ModelStateError.ReasonCode.NO_LAYER_SIZES: {
+            "expected_msg": "`layer_sizes` is not set.",
+        },
+        ModelStateError.ReasonCode.MODEL_NOT_FITTED: {
+            "expected_msg": "Model is not fitted.",
+        },
+    }
+
+
+class TestIncompatibleDataError(ErrorTestBase):
+    error_class = IncompatibleDataError
+    test_cases: ClassVar = {
+        IncompatibleDataError.ReasonCode.INVALID_NUMBER_OF_COLUMNS: {
+            "extra": {
+                "encoded_provided_data_ncols": 42,
+                "encoded_training_data_ncols": 10,
+            },
+            "expected_msg": (
+                "Incompatible data. Expected 10 columns (from encoded training "
+                "data) but provided encoded data have 42 columns. Ensure the input "
+                "is encoded with the same encoding map and contains the same "
+                "markers as the training data."
             ),
-            (
-                LayerSizesConfigurationError.ReasonCode.INVALID_LAYER_TYPE,
-                {
-                    "provided_element_type": float,
-                    "offending_index": 2,
-                },
-                (
-                    "`layer_sizes` must be a list or tuple of int, got "
-                    "`float` at index 2."
-                ),
+        },
+        IncompatibleDataError.ReasonCode.INVALID_COLUMN_INDEX: {
+            "extra": {
+                "training_data_index": pd.Index(["a", "b", "c"]),
+                "provided_data_index": pd.Index(["z", "y", "x"]),
+            },
+            "expected_msg": (
+                "Incompatible data. Provided DataFrame columns do not match "
+                "training markers index."
             ),
-        ],
-        ids=[
-            "INVALID_TYPE",
-            "TOO_FEW_LAYERS",
-            "INVALID_LAYER_TYPE",
-        ],
-    )
-    def test_error_messages_and_extra(self, reason, extra, expected_msg):
-        err = LayerSizesConfigurationError(
-            reason=reason,
-            extra=extra,
-        )
-        assert "reason" in err.extra
-        assert err.extra["reason"] is reason
-
-        if extra is not None:
-            for k, v in extra.items():
-                assert k in err.extra
-                assert v == err.extra[k]
-
-        assert expected_msg in str(err)
+        },
+    }
 
 
-class TestModelStateError:
-    def test_error_is_DeepgenocompressError(self):
-        assert issubclass(ModelStateError, DeepgenocompressError)
-
-    def test_all_reason_codes_have_a_message(self):
-        assert set(ModelStateError._MESSAGES) == set(ModelStateError.ReasonCode)
-
-    @pytest.mark.parametrize(
-        "reason, extra, expected_msg",
-        [
-            (
-                ModelStateError.ReasonCode.NO_TRAINING_DATA,
-                None,
-                "No training data available.",
+class TestCompressionModelConfigurationError(ErrorTestBase):
+    error_class = CompressionModelConfigurationError
+    test_cases: ClassVar = {
+        CompressionModelConfigurationError.ReasonCode.EMPTY_DATAFRAME: {
+            "expected_msg": (
+                "`training_dataframe` is empty. Provide a DataFrame compatible "
+                "with at least one row and one column."
             ),
-            (
-                ModelStateError.ReasonCode.NO_LAYER_SIZES,
-                None,
-                "`layer_sizes` is not set.",
+        },
+        CompressionModelConfigurationError.ReasonCode.MARKER_INDEX_SIZE_MISMATCH: {
+            "extra": {
+                "encoded_training_data_ncols": 20,
+                "encoding_size": 2,
+                "markers_index": pd.Index(["a", "b", "c"]),
+            },
+            "expected_msg": (
+                "Marker index length missmatch training data size. "
+                "Marker index has 3 markers, but the encoded training genotype "
+                "array implies 10 markers (20 columns / encoding size 2)."
             ),
-            (ModelStateError.ReasonCode.MODEL_NOT_FITTED, None, "Model is not fitted."),
-        ],
-        ids=["NO_TRAINING_DATA", "NO_LAYER_SIZES", "MODEL_NOT_FITTED"],
-    )
-    def test_error_messages_and_extra(self, reason, extra, expected_msg):
-        err = ModelStateError(
-            reason=reason,
-            extra=extra,
-        )
-        assert "reason" in err.extra
-        assert err.extra["reason"] is reason
-
-        if extra is not None:
-            for k, v in extra.items():
-                assert k in err.extra
-                assert v == err.extra[k]
-
-        assert expected_msg in str(err)
-
-
-class TestIncompatibleDataError:
-    def test_error_is_DeepgenocompressError(self):
-        assert issubclass(IncompatibleDataError, DeepgenocompressError)
-
-    def test_all_reason_codes_have_a_message(self):
-        assert set(IncompatibleDataError._MESSAGES) == set(
-            IncompatibleDataError.ReasonCode
-        )
-
-    @pytest.mark.parametrize(
-        "reason, extra, expected_msg",
-        [
-            (
-                IncompatibleDataError.ReasonCode.INVALID_NUMBER_OF_COLUMNS,
-                {"encoded_provided_data_ncols": 42, "encoded_training_data_ncols": 10},
-                (
-                    "Incompatible data. Expected 10 columns (from encoded training "
-                    "data) but provided encoded data have 42 columns. Ensure the input "
-                    "is encoded with the same encoding map and contains the same "
-                    "markers as the training data."
-                ),
-            ),
-            (
-                IncompatibleDataError.ReasonCode.INVALID_COLUMN_INDEX,
-                {
-                    "training_data_index": pd.Index(["a", "b", "c"]),
-                    "provided_data_index": pd.Index(["z", "y", "x"]),
-                },
-                (
-                    "Incompatible data. Provided DataFrame columns do not match "
-                    "training markers index."
-                ),
-            ),
-        ],
-        ids=["INVALID_NUMBER_OF_COLUMNS", "INVALID_COLUMN_INDEX"],
-    )
-    def test_error_messages_and_extra(self, reason, extra, expected_msg):
-        err = IncompatibleDataError(
-            reason=reason,
-            extra=extra,
-        )
-        assert "reason" in err.extra
-        assert err.extra["reason"] is reason
-
-        if extra is not None:
-            for k, v in extra.items():
-                assert k in err.extra
-                if isinstance(v, pd.Index):
-                    assert (v == err.extra[k]).all()
-                else:
-                    assert v == err.extra[k]
-
-        assert expected_msg in str(err)
-
-
-class TestCompressionModelConfigurationError:
-
-    def test_error_is_DeepgenocompressError(self):
-        assert issubclass(CompressionModelConfigurationError, DeepgenocompressError)
-
-    def test_all_reason_codes_have_a_message(self):
-        assert set(CompressionModelConfigurationError._MESSAGES) == set(
-            CompressionModelConfigurationError.ReasonCode
-        )
-
-    @pytest.mark.parametrize(
-        "reason, extra, expected_msg",
-        [
-            (
-                CompressionModelConfigurationError.ReasonCode.EMPTY_DATAFRAME,
-                None,
-                (
-                    "`training_dataframe` is empty. Provide a DataFrame compatible "
-                    "with at least one row and one column."
-                ),
-            ),
-            (
-                CompressionModelConfigurationError.ReasonCode.MARKER_INDEX_SIZE_MISMATCH,
-                {
-                    "encoded_training_data_ncols": 20,
-                    "encoding_size": 2,
-                    "markers_index": pd.Index(["a", "b", "c"]),
-                },
-                (
-                    "Marker index length missmatch training data size. "
-                    "Marker index has 3 markers, but the encoded training genotype "
-                    "array implies 10 markers (20 columns / encoding size 2)."
-                ),
-            ),
-        ],
-        ids=["EMPTY_DATAFRAME", "MARKER_INDEX_SIZE_MISMATCH"],
-    )
-    def test_error_messages_and_extra(self, reason, extra, expected_msg):
-        err = CompressionModelConfigurationError(
-            reason=reason,
-            extra=extra,
-        )
-        assert "reason" in err.extra
-        assert err.extra["reason"] is reason
-
-        if extra is not None:
-            for k, v in extra.items():
-                assert k in err.extra
-                if isinstance(v, pd.Index):
-                    assert (v == err.extra[k]).all()
-                else:
-                    assert v == err.extra[k]
-
-        assert expected_msg in str(err)
+        },
+    }
 
 
 class TestAutoencoderModels:

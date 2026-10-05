@@ -164,7 +164,7 @@ extend-select = [
 "warnings.warn".msg = "Use deepgenocompress._core.warnings._deepgc_warn() instead, to get the correct stacklevel automatically."
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/test_**.py" = [
+"tests/**" = [
   "D", # it is ok to not always have documentation for (small) tests
   "S101", # use of assert
   "N",   # to make test class name more permisive
