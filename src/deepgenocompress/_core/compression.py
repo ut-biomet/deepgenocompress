@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 import random
 from collections.abc import Collection, Mapping
-from enum import StrEnum, auto
+from enum import auto
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, TypedDict
 
@@ -44,7 +44,11 @@ if TYPE_CHECKING:
 from numpy.typing import ArrayLike, NDArray
 from sklearn.model_selection import train_test_split
 
-from deepgenocompress._core.exceptions import DeepgenocompressError, _type_fullname
+from deepgenocompress._core.exceptions import (
+    _ReasonCodeEnum,
+    _ReasonedError,
+    _type_fullname,
+)
 from deepgenocompress._core.warnings import DeepgenocompressWarning, _deepgc_warn
 
 from .data_processing import (
@@ -78,20 +82,17 @@ def _default_decoder_activation_functions(
     return _default_encoder_activation_functions(encoder_layers_sizes)
 
 
-class LayerSizesConfigurationError(DeepgenocompressError):
+class LayerSizesConfigurationError(_ReasonedError):
     """Raised when layer sizes configuration is not valid.
 
     Instances are constructed with a :class:`ReasonCode` identifying which validation
     failed, plus an ``extra`` mapping of contextual values.
     """
 
-    class ReasonCode(StrEnum):
-        """Possible invalid reasons."""
+    reason: ReasonCode
+    extra: ExtraKeys | dict[str, Any]
 
-        def __repr__(self) -> str:
-            """Return the string representation."""
-            return self.name
-
+    class ReasonCode(_ReasonCodeEnum):
         INVALID_TYPE = auto()
         """Provided layer sizes is not a :class:`list` or :class:`tuple`."""
         TOO_FEW_LAYERS = auto()
@@ -99,7 +100,7 @@ class LayerSizesConfigurationError(DeepgenocompressError):
         INVALID_LAYER_TYPE = auto()
         """Provided layer sizes values are not :class:`int`."""
 
-    _MESSAGES: ClassVar[dict[LayerSizesConfigurationError.ReasonCode, str]] = {
+    _MESSAGES: ClassVar[Mapping[ReasonCode, str]] = {
         ReasonCode.INVALID_TYPE: (
             "`layer_sizes` must be a list or tuple, got a {provided_type_str}."
         ),
@@ -112,54 +113,32 @@ class LayerSizesConfigurationError(DeepgenocompressError):
         ),
     }
 
-    class _Extra(TypedDict, total=False):
+    class ExtraKeys(_ReasonedError.ExtraKeys, TypedDict, total=False):
+
         reason: LayerSizesConfigurationError.ReasonCode
+        """Which rule was violated."""
         provided_type: type
         provided_layer_sizes: list | tuple
         provided_element_type: type
         offending_index: int
 
-    extra: _Extra | dict[str, Any]
-    """Extra information related to the error.
+    @classmethod
+    def _derive_format_args(
+        cls, reason: Any, extra: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        r = cls.ReasonCode
+        if reason is r.INVALID_TYPE:
+            return {"provided_type_str": _type_fullname(extra["provided_type"])}
+        if reason is r.INVALID_LAYER_TYPE:
+            return {
+                "provided_element_type_str": _type_fullname(
+                    extra["provided_element_type"]
+                )
+            }
+        if reason is r.TOO_FEW_LAYERS:
+            return {"layer_sizes_length": len(extra["provided_layer_sizes"])}
 
-    :class:`dict` with possible keys depending on the :attr:`reason`:
-        - ``reason``: :class:`ReasonCode`
-        - ``provided_type``: :class:`type`
-        - ``provided_layer_sizes``: :class:`list` or  :class:`tuple`
-        - ``provided_element_type``: :class:`type`
-        - ``offending_index``: :class:`int`
-    """
-
-    reason: ReasonCode
-    """Which validation rule layer sizes failed."""
-
-    def __init__(
-        self,
-        reason: LayerSizesConfigurationError.ReasonCode,
-        extra: LayerSizesConfigurationError._Extra | None = None,
-    ):
-        self.reason = reason
-        extra = extra or {}
-        str_extra = {
-            "provided_type_str": (
-                _type_fullname(extra["provided_type"])
-                if "provided_type" in extra
-                else None
-            ),
-            "provided_element_type_str": (
-                _type_fullname(extra["provided_element_type"])
-                if "provided_element_type" in extra
-                else None
-            ),
-            "layer_sizes_length": (
-                len(extra["provided_layer_sizes"])
-                if "provided_layer_sizes" in extra
-                else None
-            ),
-        }
-        str_extra = {k: v for k, v in str_extra.items() if v is not None}
-        message = self._MESSAGES[reason].format(**extra, **str_extra)
-        super().__init__(message=message, extra={"reason": reason, **extra})
+        return {}
 
 
 def _check_layer_sizes(layer_sizes):
@@ -350,19 +329,13 @@ class AutoencoderModels:
         )
 
 
-class ModelStateError(DeepgenocompressError):
-    """Raised when model is not correctly prepared for the requested operation.
+class ModelStateError(_ReasonedError):
+    """Raised when the model is not in the state required for an operation."""
 
-    Instances are constructed with a :class:`ReasonCode` identifying which state
-    prediction was violated.
-    """
+    reason: ReasonCode
+    extra: ExtraKeys | dict[str, Any]
 
-    class ReasonCode(StrEnum):
-        """Possible invalid reasons."""
-
-        def __repr__(self) -> str:
-            """Return the string representation."""
-            return self.name
+    class ReasonCode(_ReasonCodeEnum):
 
         NO_TRAINING_DATA = auto()
         """:attr:`CompressionModel.training_encoded_geno_array` is ``None``."""
@@ -373,57 +346,36 @@ class ModelStateError(DeepgenocompressError):
         """:attr:`CompressionModel.is_fitted` is ``False``, so the autoencoders are not
         ready to compress data."""
 
-    _MESSAGES: ClassVar[dict[ModelStateError.ReasonCode, str]] = {
+    _MESSAGES: ClassVar[Mapping[ReasonCode, str]] = {
         ReasonCode.NO_TRAINING_DATA: "No training data available.",
         ReasonCode.NO_LAYER_SIZES: "`layer_sizes` is not set.",
         ReasonCode.MODEL_NOT_FITTED: "Model is not fitted.",
     }
 
-    class _Extra(TypedDict, total=False):
+    class ExtraKeys(_ReasonedError.ExtraKeys, TypedDict, total=False):
+
         reason: ModelStateError.ReasonCode
-
-    extra: _Extra | dict[str, Any]
-    """Extra information related to the error.
-
-    :class:`dict` with possible keys depending on the :attr:`reason`:
-        - ``reason``: :class:`ReasonCode`
-    """
-
-    reason: ReasonCode
-    """Which state precondition was violated."""
-
-    def __init__(
-        self,
-        reason: ModelStateError.ReasonCode,
-        extra: ModelStateError._Extra | None = None,
-    ):
-        self.reason = reason
-        extra = extra or {}
-        message = self._MESSAGES[reason]
-        super().__init__(message=message, extra={"reason": reason, **extra})
+        """Which rule was violated."""
 
 
-class IncompatibleDataError(DeepgenocompressError):
+class IncompatibleDataError(_ReasonedError):
     """Raised when data to compress are incompatible with the model.
 
     Instances are constructed with a :class:`ReasonCode` identifying which compatibility
     check failed, plus an ``extra`` mapping of contextual values
     """
 
-    class ReasonCode(StrEnum):
-        """Possible invalid reasons."""
+    reason: ReasonCode
+    extra: ExtraKeys | dict[str, Any]
 
-        def __repr__(self) -> str:
-            """Return the string representation."""
-            return self.name
-
+    class ReasonCode(_ReasonCodeEnum):
         INVALID_NUMBER_OF_COLUMNS = auto()
         """The encoded data to compress does not have the same number of columns as the
         encoded training data."""
         INVALID_COLUMN_INDEX = auto()
         """The provided DataFrame's columns do not match the training markers index."""
 
-    _MESSAGES: ClassVar[dict[IncompatibleDataError.ReasonCode, str]] = {
+    _MESSAGES: ClassVar[Mapping[ReasonCode, str]] = {
         ReasonCode.INVALID_NUMBER_OF_COLUMNS: (
             "Incompatible data. Expected {encoded_training_data_ncols} columns "
             "(from encoded training data) but provided encoded data have "
@@ -436,56 +388,33 @@ class IncompatibleDataError(DeepgenocompressError):
         ),
     }
 
-    class _Extra(TypedDict, total=False):
+    class ExtraKeys(_ReasonedError.ExtraKeys, TypedDict, total=False):
+
+        reason: IncompatibleDataError.ReasonCode
+        """Which rule was violated."""
         encoded_provided_data_ncols: int
         encoded_training_data_ncols: int
         training_data_index: pd.Index
         provided_data_index: pd.Index
 
-    extra: _Extra | dict[str, Any]
-    """Extra information related to the error.
 
-    :class:`dict` with possible keys depending on the :attr:`reason`:
-        - ``reason``: :class:`ReasonCode`
-        - ``encoded_provided_data_ncols``: :class:`int`
-        - ``encoded_training_data_ncols``: :class:`int`
-        - ``training_data_index``: :class:`pd.Index`
-        - ``provided_data_index``: :class:`pd.Index`
-    """
-    reason: ReasonCode
-    """Which compatibility check failed."""
-
-    def __init__(
-        self,
-        reason: IncompatibleDataError.ReasonCode,
-        extra: IncompatibleDataError._Extra | None = None,
-    ):
-        self.reason = reason
-        extra = extra or {}
-        message = self._MESSAGES[reason].format(**extra)
-        super().__init__(message=message, extra={"reason": reason, **extra})
-
-
-class CompressionModelConfigurationError(DeepgenocompressError):
+class CompressionModelConfigurationError(_ReasonedError):
     """Raised when a :class:`CompressionModel` is configured with incompatible inputs.
 
     Instances are constructed with a :class:`ReasonCode` identifying which configuration
     check failed, plus an ``extra`` mapping of contextual values.
     """
 
-    class ReasonCode(StrEnum):
-        """Possible invalid reasons."""
+    reason: ReasonCode
+    extra: ExtraKeys | dict[str, Any]
 
-        def __repr__(self) -> str:
-            """Return the string representation."""
-            return self.name
-
+    class ReasonCode(_ReasonCodeEnum):
         EMPTY_DATAFRAME = auto()
         """The training DataFrame is empty."""
         MARKER_INDEX_SIZE_MISMATCH = auto()
         """Marker index length missmatch training data size."""
 
-    _MESSAGES: ClassVar[dict[CompressionModelConfigurationError.ReasonCode, str]] = {
+    _MESSAGES: ClassVar[Mapping[ReasonCode, str]] = {
         ReasonCode.EMPTY_DATAFRAME: (
             "`training_dataframe` is empty. Provide a DataFrame compatible with "
             "at least one row and one column."
@@ -498,44 +427,28 @@ class CompressionModelConfigurationError(DeepgenocompressError):
         ),
     }
 
-    class _Extra(TypedDict, total=False):
+    class ExtraKeys(_ReasonedError.ExtraKeys, TypedDict, total=False):
+
         reason: CompressionModelConfigurationError.ReasonCode
+        """Which rule was violated."""
         encoded_training_data_ncols: int
         encoding_size: int
         markers_index: pd.Index
 
-    extra: _Extra | dict[str, Any]
-    """Extra information related to the error.
+    @classmethod
+    def _derive_format_args(
+        cls, reason: Any, extra: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        r = cls.ReasonCode
+        if reason is r.MARKER_INDEX_SIZE_MISMATCH:
+            return {
+                "markers_index_length": len(extra["markers_index"]),
+                "expected_n_markers": int(
+                    extra["encoded_training_data_ncols"] / extra["encoding_size"]
+                ),
+            }
 
-    :class:`dict` with possible keys depending on the :attr:`reason`:
-        - ``reason``: :class:`ReasonCode`
-        - ``encoded_training_data_ncols``: :class:`int`
-        - ``encoding_size``: :class:`int`
-        - ``markers_index``: :class:`pd.Index`
-    """
-    reason: ReasonCode
-    """Which configuration check failed."""
-
-    def __init__(
-        self,
-        reason: CompressionModelConfigurationError.ReasonCode,
-        extra: CompressionModelConfigurationError._Extra | None = None,
-    ):
-        self.reason = reason
-        extra = extra or {}
-        str_extra = {
-            "markers_index_length": (
-                len(extra["markers_index"]) if "markers_index" in extra else None
-            ),
-            "expected_n_markers": (
-                int(extra["encoded_training_data_ncols"] / extra["encoding_size"])
-                if ("encoded_training_data_ncols" in extra and "encoding_size" in extra)
-                else None
-            ),
-        }
-        str_extra = {k: v for k, v in str_extra.items() if v is not None}
-        message = self._MESSAGES[reason].format(**extra, **str_extra)
-        super().__init__(message=message, extra={"reason": reason, **extra})
+        return {}
 
 
 def _check_marker_index_size_compatibility(

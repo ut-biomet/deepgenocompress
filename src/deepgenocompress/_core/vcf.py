@@ -24,14 +24,12 @@ _MARKER_ID_FORMAT = Literal["id", "pos", "ref_alt", "alleles"]
 class UnexpectedMarkerIdFormatError(DeepgenocompressError, ValueError):
     """Raised when provided marker_id_format is not expected."""
 
-    class _Extra(TypedDict):
+    class ExtraKeys(TypedDict):
         provided: str
+        """The unnexpected marker id format provided."""
 
-    extra: "_Extra | dict[str, Any]"
-    """Extra information related to the error.
-
-    One key ``provided`` being the unnexpected marker id format provided.
-    """
+    extra: "ExtraKeys | dict[str, Any]"
+    """Extra contextual information related to the error. """
 
     def __init__(self, provided):
         super().__init__(

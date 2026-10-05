@@ -5,16 +5,17 @@ import deepgenocompress.exceptions as exceptions_module
 from deepgenocompress._core.exceptions import DeepgenocompressError
 
 custom_errors = get_all_subclasses(DeepgenocompressError)
+public_custom_errors = [name for name in custom_errors if not name.startswith("_")]
 
 
 @pytest.mark.parametrize(
-    "custom_error",
-    list(custom_errors.keys()),
+    "public_custom_errors",
+    public_custom_errors,
 )
-def test_all_exceptions_are_exported_from_exceptions_module(custom_error):
+def test_all_exceptions_are_exported_from_exceptions_module(public_custom_errors):
     exported_names = set(exceptions_module.__all__)
 
-    assert custom_error in exported_names
+    assert public_custom_errors in exported_names
 
 
 @pytest.mark.parametrize(
