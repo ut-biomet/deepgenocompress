@@ -7,6 +7,10 @@ project adheres to [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed invalid keras version constraint; now requires keras>=3.12.0
+
 ### Added
 
 - `CHANGELOG.md`: All notable changes to this project will be documented in this file.

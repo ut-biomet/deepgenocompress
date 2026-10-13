@@ -773,7 +773,7 @@ test = [
 requires-dist = [
     { name = "cyvcf2", specifier = ">=0.34.0" },
     { name = "jax", marker = "extra == 'jax'", specifier = ">=0.11.1" },
-    { name = "keras", specifier = ">=2.21.0" },
+    { name = "keras", specifier = ">=3.12.0" },
     { name = "numpy", specifier = ">=2.4.4" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "scikit-learn", specifier = ">=1.8.0" },
